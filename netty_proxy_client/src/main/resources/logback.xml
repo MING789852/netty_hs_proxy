@@ -1,0 +1,27 @@
+<configuration>
+
+    <property name="LOG_PATTERN"  value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger - %msg%n"/>
+
+    <!-- 控制台输出 -->
+    <!-- console -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!--            <pattern>%d %level [%thread] %logger{10} [%file:%line] %msg%n</pattern>-->
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>utf-8</charset>
+        </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>debug</level>
+        </filter>
+    </appender>
+
+
+    <!--配置日志输出级别 -->
+    <logger name="com.xm.netty_proxy_client.proxyHandler.SendProxyMessageHandler" level="INFO"/>
+    <logger name="com.xm.netty_proxy_client.proxyHandler.ReceiveProxyMessageHandler" level="INFO"/>
+
+    <!-- 设置日志输出级别 -->
+    <root level="DEBUG">
+        <appender-ref ref="STDOUT" />
+    </root>
+</configuration>
