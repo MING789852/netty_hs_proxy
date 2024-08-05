@@ -5,7 +5,6 @@ import java.util.ResourceBundle;
 public class Config {
     public static final String SendProxyMessageHandler = "SendProxyMessageHandler";
     public static final String ProxyServerMessageHandler = "ProxyServerMessageHandler";
-    public static final String SocksPortUnificationServerHandler="SocksPortUnificationServerHandler";
     public static final String SocksServerProxyClientHandler="SocksServerProxyClientHandler";
     public static final String Socks5CommandRequestDecoder="Socks5CommandRequestDecoder";
 
@@ -20,8 +19,6 @@ public class Config {
     public static final boolean clientOpenPool;
 
     public static final int clientPoolSize;
-
-    public static final String proxyType;
 
 
     static {
@@ -38,7 +35,5 @@ public class Config {
             poolSize = Integer.parseInt(bundle.getString("client.clientPoolSize"));
         }
         clientPoolSize = poolSize;
-
-        proxyType=bundle.getString("server.proxyType");
     }
 }

@@ -23,14 +23,6 @@ public class HttpServerProxyClientHandler extends SimpleChannelInboundHandler<Fu
 
             boolean isConnectMethod = HttpMethod.CONNECT.equals(httpRequest.method());
 
-            if (!isConnectMethod){
-//                        log.info("[http代理客户端]method->{},refCnt->{},非建立连接请求,本请求直接转发",httpRequest.method().name(),httpRequest.refCnt());
-//                        ByteBuf content =httpRequest.content();
-//                        proxyServerChannel.writeAndFlush(ProxyConnectManager.wrapTransferByteBuf(content));
-                localChannel.close();
-                return;
-            }
-
             // 解析目标主机host和端口号
             HostAndPort hostAndPort = parseHostAndPort(httpRequest, isConnectMethod);
             log.info("[http代理客户端]代理目标->{}",hostAndPort);
