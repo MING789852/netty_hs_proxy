@@ -32,6 +32,7 @@ public class ProxyConnectManager {
     static {
         bootstrap
                 .group(new NioEventLoopGroup())
+                .option(ChannelOption.SO_KEEPALIVE,true)
                 .channel(NioSocketChannel.class);
 
         if (Config.clientOpenPool){
@@ -95,7 +96,7 @@ public class ProxyConnectManager {
 
     public static void returnProxyConnect(Channel proxyChannel){
         if (Config.clientOpenPool){
-            if (proxyChannel!=null&&proxyChannel.isActive()) {
+            if (proxyChannel!=null) {
                 fixedChannelPool.release(proxyChannel);
             }
         }
@@ -106,8 +107,14 @@ public class ProxyConnectManager {
             fixedChannelPool.acquire().addListener((FutureListener<Channel>) channelFuture -> {
                 if (channelFuture.isSuccess()){
                     Channel channel = channelFuture.getNow();
-                    //发送建立连接请求
-                    sendBuildConnectRequest(true,connectCallBack,localChannel,channel,proxyRequest);
+                    if (!channel.isActive()){
+                        log.error("[代理池]代理池获取连接未激活，重新获取");
+                        fixedChannelPool.release(channel);
+                        getProxyConnect(connectCallBack, localChannel, proxyRequest);
+                    }else {
+                        //发送建立连接请求
+                        sendBuildConnectRequest(true,connectCallBack,localChannel,channel,proxyRequest);
+                    }
                 }
             });
         }else {
