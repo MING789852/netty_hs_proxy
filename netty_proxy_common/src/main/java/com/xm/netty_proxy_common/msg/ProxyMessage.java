@@ -13,9 +13,19 @@ public class ProxyMessage {
      */
     public static final byte TRANSFER = 0x04;
     /**
-     * 关闭连接
+     * 通知客户端关闭连接
      */
-    public static final byte CLOSE = 0X05;
+    public static final byte SERVER_PROXY_FAIL = 0X05;
+
+    /**
+     * 通知服务端关闭连接
+     */
+    public static final byte NOTIFY_SERVER_CLOSE= 0X06;
+
+    /**
+     * 服务端关闭连接确认
+     */
+    public static final byte NOTIFY_SERVER_CLOSE_ACK=0X07;
 
     /**
      * 0x1、连接  0x2、断开

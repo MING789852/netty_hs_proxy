@@ -67,22 +67,33 @@ public class ProxyConnectManager {
         serverChannel.attr(Constants.NEXT_CHANNEL).set(null);
     }
 
-    public static  void  notifyClientClose(Channel serverChannel,String host,int port) {
+    public static  void  notifyServerProxyFail(Channel serverChannel,String host,int port) {
         unBindChannel(serverChannel);
         if (serverChannel!=null) {
-            serverChannel.writeAndFlush(ProxyConnectManager.wrapClose(host,port));
+            serverChannel.writeAndFlush(ProxyConnectManager.wrapServerProxyFail(host,port));
         }
     }
 
-    public static ProxyMessage wrapClose(String host,int port){
+    public static ProxyMessage wrapServerProxyFail(String host,int port){
         ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessage.CLOSE);
+        proxyMessage.setType(ProxyMessage.SERVER_PROXY_FAIL);
         proxyMessage.setUsername(Config.username);
         proxyMessage.setPassword(Config.password);
         proxyMessage.setTargetHost(host);
         proxyMessage.setTargetPort(port);
         proxyMessage.setData("4".getBytes());
 
+        return proxyMessage;
+    }
+
+    public static ProxyMessage wrapNotifyServerCloseAck(){
+        ProxyMessage proxyMessage=new ProxyMessage();
+        proxyMessage.setType(ProxyMessage.NOTIFY_SERVER_CLOSE_ACK);
+        proxyMessage.setUsername(Config.username);
+        proxyMessage.setPassword(Config.password);
+        proxyMessage.setTargetHost("5");
+        proxyMessage.setTargetPort(5);
+        proxyMessage.setData("5".getBytes());
         return proxyMessage;
     }
 

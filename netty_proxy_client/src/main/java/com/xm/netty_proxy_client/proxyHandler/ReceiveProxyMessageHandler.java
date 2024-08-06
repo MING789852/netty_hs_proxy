@@ -28,14 +28,20 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
         if (ProxyMessage.CONNECT_SUCCESS==proxyMessage.getType()){
             connectCallBack.success(proxyChannel,isPoolChannel);
         }else if (ProxyMessage.TRANSFER==proxyMessage.getType()){
-            ByteBuf byteBuf = channelHandlerContext.alloc().buffer(proxyMessage.getData().length);
-            log.info("[代理客户端]开始回写数据到本地,目标->{}",localChannel.remoteAddress());
-            byteBuf.writeBytes(proxyMessage.getData());
-            localChannel.writeAndFlush(byteBuf);
-        }else if (ProxyMessage.CLOSE==proxyMessage.getType()){
-            log.info("[代理客户端]接收到代理服务器关闭通知,代理目标地址->{}:{}",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
+            if (localChannel.isActive()){
+                ByteBuf byteBuf = channelHandlerContext.alloc().buffer(proxyMessage.getData().length);
+                log.info("[代理客户端]开始回写数据到本地,目标->{}",localChannel.remoteAddress());
+                byteBuf.writeBytes(proxyMessage.getData());
+                localChannel.writeAndFlush(byteBuf);
+            }
+        }else if (ProxyMessage.SERVER_PROXY_FAIL==proxyMessage.getType()){
+            log.info("[代理客户端]接收到代理服务器连接失败,关闭本地连接,归还代理连接\n{}:{}",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
             //关闭本地连接
             localChannel.close();
+            //归还代理连接
+            ProxyConnectManager.returnProxyConnect(proxyChannel);
+        }else if (ProxyMessage.NOTIFY_SERVER_CLOSE_ACK==proxyMessage.getType()){
+            log.info("[代理客户端]接收到代理服务器已关闭通知确认,归还代理连接");
             //归还代理连接
             ProxyConnectManager.returnProxyConnect(proxyChannel);
         }else {
@@ -50,7 +56,7 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         log.error("[代理客户端]错误",cause);
     }
 }

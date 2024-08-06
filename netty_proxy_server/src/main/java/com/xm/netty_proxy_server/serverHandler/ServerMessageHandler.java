@@ -33,8 +33,8 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                     @Override
                     public void error() {
                         //通知客户端关闭连接
-                        log.info("[代理服务]通知客户端关闭连接");
-                        ProxyConnectManager.notifyClientClose(serverChannel,proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
+                        log.info("[代理服务]通知客户端代理连接->{}:{}失败",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
+                        ProxyConnectManager.notifyServerProxyFail(serverChannel,proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
                     }
                 });
             }
@@ -47,13 +47,15 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                     connectChannel.writeAndFlush(byteBuf);
                 }
             }
-            if (ProxyMessage.CLOSE==proxyMessage.getType()){
+            if (ProxyMessage.NOTIFY_SERVER_CLOSE==proxyMessage.getType()){
                 log.info("[代理服务]接收到客户端断开连接请求");
                 Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
                 if (connectChannel!=null){
                     connectChannel.close();
                 }
                 ProxyConnectManager.unBindChannel(serverChannel);
+                //通知客户端关闭完成
+                serverChannel.writeAndFlush(ProxyConnectManager.wrapNotifyServerCloseAck());
             }
         }
     }

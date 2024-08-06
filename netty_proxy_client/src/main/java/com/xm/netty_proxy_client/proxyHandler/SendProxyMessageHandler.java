@@ -34,9 +34,7 @@ public class SendProxyMessageHandler extends ChannelInboundHandlerAdapter {
         super.channelInactive(ctx);
         log.info("[本地连接]{}执行关闭操作",ctx.channel().remoteAddress());
         //发送客户端断开连接
-        proxyChannel.writeAndFlush(ProxyConnectManager.wrapClose("4",4));
-        //归还代理连接
-        ProxyConnectManager.returnProxyConnect(proxyChannel);
+        proxyChannel.writeAndFlush(ProxyConnectManager.wrapNotifyServerClose());
     }
 
     @Override

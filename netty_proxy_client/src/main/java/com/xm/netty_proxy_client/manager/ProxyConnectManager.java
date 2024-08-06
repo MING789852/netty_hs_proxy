@@ -10,10 +10,7 @@ import com.xm.netty_proxy_common.msg.ProxyMessage;
 import com.xm.netty_proxy_common.msg.ProxyRequest;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelPipeline;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.pool.ChannelPoolHandler;
 import io.netty.channel.pool.FixedChannelPool;
@@ -42,17 +39,19 @@ public class ProxyConnectManager {
             fixedChannelPool=new FixedChannelPool(bootstrap, new ChannelPoolHandler() {
                 @Override
                 public void channelReleased(Channel channel) {
-                    log.info("[代理池]归还连接,连接数量->{}",fixedChannelPool.acquiredChannelCount());
+                    channel.config().setAutoRead(false);
+                    log.info("[代理池]归还连接,已连接数量->{}",fixedChannelPool.acquiredChannelCount());
                 }
 
                 @Override
                 public void channelAcquired(Channel channel) {
-                    log.info("[代理池]获取连接池连接,连接数量->{}",fixedChannelPool.acquiredChannelCount());
+                    channel.config().setAutoRead(true);
+                    log.info("[代理池]获取连接池连接,已连接数量->{}",fixedChannelPool.acquiredChannelCount());
                 }
 
                 @Override
                 public void channelCreated(Channel channel) {
-                    log.info("[代理池]创建新连接,连接数量->{}",fixedChannelPool.acquiredChannelCount());
+                    log.info("[代理池]创建新连接,已连接数量->{}",fixedChannelPool.acquiredChannelCount());
                     ChannelPipeline pipeline=channel.pipeline();
                     pipeline.addLast(new MLengthFieldBasedFrameDecoder());
                     //解析数据
@@ -96,7 +95,7 @@ public class ProxyConnectManager {
 
     public static void returnProxyConnect(Channel proxyChannel){
         if (Config.clientOpenPool){
-            if (proxyChannel!=null) {
+            if (proxyChannel!=null&&proxyChannel.isActive()) {
                 fixedChannelPool.release(proxyChannel);
             }
         }
@@ -155,13 +154,13 @@ public class ProxyConnectManager {
     }
 
 
-    public static ProxyMessage wrapClose(String host,int port){
+    public static ProxyMessage wrapNotifyServerClose(){
         ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessage.CLOSE);
+        proxyMessage.setType(ProxyMessage.NOTIFY_SERVER_CLOSE);
         proxyMessage.setUsername(Config.username);
         proxyMessage.setPassword(Config.password);
-        proxyMessage.setTargetHost(host);
-        proxyMessage.setTargetPort(port);
+        proxyMessage.setTargetHost("4");
+        proxyMessage.setTargetPort(4);
         proxyMessage.setData("4".getBytes());
 
         return proxyMessage;

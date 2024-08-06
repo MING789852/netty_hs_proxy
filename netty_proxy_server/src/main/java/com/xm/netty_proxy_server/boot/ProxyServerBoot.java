@@ -30,6 +30,7 @@ public class ProxyServerBoot {
         try {
             bootstrap.group(bossGroup,workerGroup)
                     .channel(NioServerSocketChannel.class)
+                    .childOption(ChannelOption.SO_KEEPALIVE,true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel socketChannel) throws Exception {
