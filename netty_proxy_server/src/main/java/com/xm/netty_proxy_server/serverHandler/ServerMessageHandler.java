@@ -3,31 +3,45 @@ package com.xm.netty_proxy_server.serverHandler;
 import com.xm.netty_proxy_common.callback.ConnectCallBack;
 import com.xm.netty_proxy_common.key.Constants;
 import com.xm.netty_proxy_common.msg.ProxyMessage;
+import com.xm.netty_proxy_common.msg.ProxyMessageType;
 import com.xm.netty_proxy_server.config.Config;
 import com.xm.netty_proxy_server.manager.ProxyConnectManager;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.*;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessage> {
 
     @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
+        if (evt instanceof IdleStateEvent) {
+            IdleStateEvent event = (IdleStateEvent) evt;
+            if (IdleState.READER_IDLE.equals((event.state()))) {
+                log.info("[代理服务]未收到代理客户端心跳请求，尝试发送心跳连接检测是否存在");
+                ctx.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapPing()).addListener(ChannelFutureListener.CLOSE_ON_FAILURE) ;
+            }
+        }
+    }
+
+    @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyMessage proxyMessage) {
         Channel serverChannel=channelHandlerContext.channel();
         //验证账号密码是否正确
         if (Config.username.equals(proxyMessage.getUsername())&&Config.password.equals(proxyMessage.getPassword())){
-            if (ProxyMessage.BUILD_CONNECT==proxyMessage.getType()){
+            if (ProxyMessageType.PING==proxyMessage.getType()){
+                log.info("[代理服务]接收到代理客户端->{}心跳请求",serverChannel.id().asShortText());
+            }
+            if (ProxyMessageType.BUILD_CONNECT==proxyMessage.getType()){
                 ProxyConnectManager.connect(proxyMessage.getTargetHost(), proxyMessage.getTargetPort(), new ConnectCallBack() {
                     @Override
                     public void success(Channel connectChannel,boolean isPoolChannel) {
                         //绑定连接
                         ProxyConnectManager.bindChannel(serverChannel,connectChannel);
                         //发送连接成功回调
-                        serverChannel.writeAndFlush(ProxyConnectManager.wrapConnectSuccess(proxyMessage.getTargetHost(),proxyMessage.getTargetPort()));
+                        serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapConnectSuccess(proxyMessage.getTargetHost(),proxyMessage.getTargetPort()));
                     }
 
                     @Override
@@ -38,7 +52,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                     }
                 });
             }
-            if (ProxyMessage.TRANSFER==proxyMessage.getType()){
+            if (ProxyMessageType.TRANSFER==proxyMessage.getType()){
                 Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
                 if (connectChannel!=null){
                     ByteBuf byteBuf = channelHandlerContext.alloc().buffer(proxyMessage.getData().length);
@@ -47,7 +61,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                     connectChannel.writeAndFlush(byteBuf);
                 }
             }
-            if (ProxyMessage.NOTIFY_SERVER_CLOSE==proxyMessage.getType()){
+            if (ProxyMessageType.NOTIFY_SERVER_CLOSE==proxyMessage.getType()){
                 log.info("[代理服务]接收到客户端断开连接请求");
                 Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
                 if (connectChannel!=null){
@@ -55,7 +69,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                 }
                 ProxyConnectManager.unBindChannel(serverChannel);
                 //通知客户端关闭完成
-                serverChannel.writeAndFlush(ProxyConnectManager.wrapNotifyServerCloseAck());
+                serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapNotifyServerCloseAck());
             }
         }
     }

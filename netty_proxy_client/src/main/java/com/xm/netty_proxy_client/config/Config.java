@@ -20,6 +20,8 @@ public class Config {
 
     public static final int clientPoolSize;
 
+    public static final int writerIdleTime;
+
 
     static {
         ResourceBundle bundle = ResourceBundle.getBundle("application");
@@ -28,8 +30,8 @@ public class Config {
         serverHost= bundle.getString("server.host");
         serverPort= Integer.parseInt(bundle.getString("server.port"));
         clientPort=Integer.parseInt(bundle.getString("client.port"));
+        writerIdleTime=Integer.parseInt(bundle.getString("client.writerIdleTime"));
         clientOpenPool=Boolean.parseBoolean(bundle.getString("client.openPool"));
-
         int poolSize =0;
         if (clientOpenPool){
             poolSize = Integer.parseInt(bundle.getString("client.clientPoolSize"));

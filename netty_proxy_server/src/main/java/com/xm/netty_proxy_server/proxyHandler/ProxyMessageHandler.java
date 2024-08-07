@@ -25,7 +25,7 @@ public class ProxyMessageHandler extends ChannelInboundHandlerAdapter {
         if (serverChannel!=null){
             ByteBuf byteBuf= (ByteBuf) msg;
             log.debug("[代理目标连接]目标地址->{},回写数据",connectChannel.remoteAddress());
-            serverChannel.writeAndFlush(ProxyConnectManager.wrapTransfer(byteBuf));
+            serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(byteBuf));
         }else {
             log.debug("[代理目标连接]目标地址->{},代理服务连接不存在，无法回写",connectChannel.remoteAddress());
             ReferenceCountUtil.release(msg);

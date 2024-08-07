@@ -71,7 +71,7 @@ public class SocksServerProxyClientHandler extends SimpleChannelInboundHandler<S
             String destAddress = request.dstAddr();
             int destPort= request.dstPort();
             log.info("[本地连接][socks5]目标->{}:{}",destAddress,destPort);
-
+            localChannel.config().setAutoRead(false);
             //设置代理信息
             ProxyRequest proxyRequest=new ProxyRequest();
             proxyRequest.setTargetHost(destAddress);

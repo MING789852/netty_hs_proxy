@@ -22,7 +22,7 @@ public class SendProxyMessageHandler extends ChannelInboundHandlerAdapter {
         if (proxyChannel!=null){
             ByteBuf byteBuf= (ByteBuf) msg;
             log.info("[本地连接]{}发送数据到代理服务器->{}",ctx.channel().remoteAddress(),proxyChannel.remoteAddress());
-            proxyChannel.writeAndFlush(ProxyConnectManager.wrapTransferByteBuf(byteBuf));
+            proxyChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(byteBuf));
         } else {
             log.info("[本地连接]{}未关联代理服务器连接",ctx.channel().remoteAddress());
             ReferenceCountUtil.release(msg);
@@ -34,7 +34,7 @@ public class SendProxyMessageHandler extends ChannelInboundHandlerAdapter {
         super.channelInactive(ctx);
         log.info("[本地连接]{}执行关闭操作",ctx.channel().remoteAddress());
         //发送客户端断开连接
-        proxyChannel.writeAndFlush(ProxyConnectManager.wrapNotifyServerClose());
+        proxyChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapNotifyServerClose());
     }
 
     @Override

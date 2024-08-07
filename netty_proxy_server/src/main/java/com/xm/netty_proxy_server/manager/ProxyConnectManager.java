@@ -3,6 +3,8 @@ package com.xm.netty_proxy_server.manager;
 import com.xm.netty_proxy_common.callback.ConnectCallBack;
 import com.xm.netty_proxy_common.key.Constants;
 import com.xm.netty_proxy_common.msg.ProxyMessage;
+import com.xm.netty_proxy_common.msg.ProxyMessageManager;
+import com.xm.netty_proxy_common.msg.ProxyMessageType;
 import com.xm.netty_proxy_server.config.Config;
 import com.xm.netty_proxy_server.proxyHandler.ProxyMessageHandler;
 import io.netty.bootstrap.Bootstrap;
@@ -14,13 +16,18 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.ReferenceCountUtil;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class ProxyConnectManager {
     private static final Bootstrap bootstrap=new Bootstrap();
 
+    @Getter
+    private static final ProxyMessageManager proxyMessageManager;
+
     static {
+        proxyMessageManager=new ProxyMessageManager(Config.username,Config.password);
         bootstrap
                 .group(new NioEventLoopGroup())
                 .channel(NioSocketChannel.class)
@@ -70,56 +77,7 @@ public class ProxyConnectManager {
     public static  void  notifyServerProxyFail(Channel serverChannel,String host,int port) {
         unBindChannel(serverChannel);
         if (serverChannel!=null) {
-            serverChannel.writeAndFlush(ProxyConnectManager.wrapServerProxyFail(host,port));
+            serverChannel.writeAndFlush(proxyMessageManager.wrapServerProxyFail(host,port));
         }
-    }
-
-    public static ProxyMessage wrapServerProxyFail(String host,int port){
-        ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessage.SERVER_PROXY_FAIL);
-        proxyMessage.setUsername(Config.username);
-        proxyMessage.setPassword(Config.password);
-        proxyMessage.setTargetHost(host);
-        proxyMessage.setTargetPort(port);
-        proxyMessage.setData("4".getBytes());
-
-        return proxyMessage;
-    }
-
-    public static ProxyMessage wrapNotifyServerCloseAck(){
-        ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessage.NOTIFY_SERVER_CLOSE_ACK);
-        proxyMessage.setUsername(Config.username);
-        proxyMessage.setPassword(Config.password);
-        proxyMessage.setTargetHost("5");
-        proxyMessage.setTargetPort(5);
-        proxyMessage.setData("5".getBytes());
-        return proxyMessage;
-    }
-
-    public static ProxyMessage wrapConnectSuccess(String host,int port){
-        ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessage.CONNECT_SUCCESS);
-        proxyMessage.setUsername(Config.username);
-        proxyMessage.setPassword(Config.password);
-        proxyMessage.setTargetHost(host);
-        proxyMessage.setTargetPort(port);
-        proxyMessage.setData("2".getBytes());
-
-        return proxyMessage;
-    }
-
-    public static ProxyMessage wrapTransfer(ByteBuf byteBuf){
-        ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessage.TRANSFER);
-        proxyMessage.setUsername(Config.username);
-        proxyMessage.setPassword(Config.password);
-        proxyMessage.setTargetHost("3");
-        proxyMessage.setTargetPort(8888);
-        byte[] data=new byte[byteBuf.readableBytes()];
-        byteBuf.readBytes(data);
-        ReferenceCountUtil.release(byteBuf);
-        proxyMessage.setData(data);
-        return proxyMessage;
     }
 }
