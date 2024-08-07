@@ -32,9 +32,7 @@ public class ProxyConnectManager {
     static {
         bootstrap
                 .group(new NioEventLoopGroup())
-                .option(ChannelOption.SO_KEEPALIVE,true)
                 .channel(NioSocketChannel.class);
-
         if (Config.clientOpenPool){
             bootstrap.remoteAddress(Config.serverHost,Config.serverPort);
             fixedChannelPool=new FixedChannelPool(bootstrap, new ChannelPoolHandler() {
@@ -89,7 +87,7 @@ public class ProxyConnectManager {
                 .addListener((ChannelFutureListener) channelFuture -> {
                     if (!channelFuture.isSuccess()){
                         log.info("[代理客户端]发送请求建立代理连接服务失败");
-                        connectCallBack.error();
+                        connectCallBack.error(channelFuture.channel());
                     }
                 });
     }
@@ -125,7 +123,7 @@ public class ProxyConnectManager {
                     sendBuildConnectRequest(false,connectCallBack,localChannel,channelFuture.channel(),proxyRequest);
                 }else {
                     log.info("[代理池]创建新代理连接失败");
-                    connectCallBack.error();
+                    connectCallBack.error(channelFuture.channel());
                 }
             });
         }

@@ -5,5 +5,5 @@ import io.netty.channel.Channel;
 
 public interface ConnectCallBack {
     void success(Channel channel,boolean isPoolChannel);
-    void error();
+    void error(Channel channel);
 }

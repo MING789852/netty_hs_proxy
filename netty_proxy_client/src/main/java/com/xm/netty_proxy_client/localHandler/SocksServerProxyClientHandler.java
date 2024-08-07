@@ -48,10 +48,11 @@ public class SocksServerProxyClientHandler extends SimpleChannelInboundHandler<S
                     });
                 }
                 @Override
-                public void error() {
-                    log.error("[本地连接][socks4]连接代理服务器失败");
+                public void error(Channel proxyServerChannel) {
+                    log.error("[本地连接][socks4]连接代理服务器失败,返回连接失败响应,归还代理连接");
                     localChannel
                             .writeAndFlush(new DefaultSocks4CommandResponse(Socks4CommandStatus.REJECTED_OR_FAILED));
+                    ProxyConnectManager.returnProxyConnect(proxyServerChannel);
                 }
             },localChannel,proxyRequest);
         }else if (socksMessage instanceof Socks5InitialRequest) {
@@ -97,10 +98,11 @@ public class SocksServerProxyClientHandler extends SimpleChannelInboundHandler<S
                     });
                 }
                 @Override
-                public void error() {
-                    log.error("[本地连接][socks5]连接代理服务器失败");
+                public void error(Channel proxyServerChannel) {
+                    log.error("[本地连接][socks5]连接代理服务器失败,返回连接失败响应,归还代理连接");
                     localChannel
                             .writeAndFlush(new DefaultSocks5CommandResponse(Socks5CommandStatus.FAILURE,request.dstAddrType()));
+                    ProxyConnectManager.returnProxyConnect(proxyServerChannel);
                 }
             },localChannel,proxyRequest);
         }else {

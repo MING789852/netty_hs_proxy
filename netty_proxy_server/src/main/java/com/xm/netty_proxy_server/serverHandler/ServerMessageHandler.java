@@ -31,7 +31,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                     }
 
                     @Override
-                    public void error() {
+                    public void error(Channel connectChannel) {
                         //通知客户端关闭连接
                         log.info("[代理服务]通知客户端代理连接->{}:{}失败",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
                         ProxyConnectManager.notifyServerProxyFail(serverChannel,proxyMessage.getTargetHost(),proxyMessage.getTargetPort());

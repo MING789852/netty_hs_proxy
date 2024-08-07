@@ -58,8 +58,9 @@ public class HttpServerProxyClientHandler extends SimpleChannelInboundHandler<Fu
                     });
                 }
                 @Override
-                public void error() {
-                    log.error("[http代理客户端]连接代理服务器失败");
+                public void error(Channel proxyServerChannel) {
+                    log.error("[http代理客户端]连接代理服务器失败,归还代理连接");
+                    ProxyConnectManager.returnProxyConnect(proxyServerChannel);
                 }
             },localChannel,proxyRequest);
         }else {

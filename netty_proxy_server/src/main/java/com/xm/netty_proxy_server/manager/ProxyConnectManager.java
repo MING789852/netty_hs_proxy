@@ -43,7 +43,7 @@ public class ProxyConnectManager {
                 connectCallBack.success(channelFuture.channel(),false);
             }else {
                 log.info("[代理服务]连接失败->{}:{}",host,port);
-                connectCallBack.error();
+                connectCallBack.error(channelFuture.channel());
             }
         });
     }
