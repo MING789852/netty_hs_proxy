@@ -34,6 +34,7 @@ public class ProxyMessageHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        ctx.channel().flush();
         super.channelInactive(ctx);
         log.info("[代理目标连接]目标地址->{},连接关闭",ctx.channel().remoteAddress());
     }

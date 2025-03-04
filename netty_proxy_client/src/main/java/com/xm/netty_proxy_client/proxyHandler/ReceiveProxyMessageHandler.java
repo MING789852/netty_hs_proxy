@@ -57,10 +57,11 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        super.channelInactive(ctx);
+        ctx.channel().flush();
         Channel proxyChannel=ctx.channel();
-        log.info("[代理客户端]代理连接关闭,归还代理连接");
+        log.info("[代理客户端]本地连接关闭,归还代理连接");
         ProxyConnectManager.returnProxyConnect(proxyChannel);
+        super.channelInactive(ctx);
     }
 
     @Override
