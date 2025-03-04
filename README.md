@@ -43,4 +43,5 @@ java -jar proxy_client.jar
 ```
 socks5：浏览器下载相关代理工具比如SwitchyOmega，配置127.0.0.1地址 和 1080端口
 socks4：设置系统代理地址socks=127.0.0.1,端口1080
+http：设置系统代理地址127.0.0.1,端口1080
 ```
