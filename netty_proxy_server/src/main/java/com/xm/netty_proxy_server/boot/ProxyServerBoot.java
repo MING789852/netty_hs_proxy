@@ -6,14 +6,15 @@ import com.xm.netty_proxy_common.encoder.ProxyMessageEncoder;
 import com.xm.netty_proxy_server.config.Config;
 import com.xm.netty_proxy_server.serverHandler.ServerMessageHandler;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.*;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioChannelOption;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class ProxyServerBoot {
@@ -33,6 +34,7 @@ public class ProxyServerBoot {
         try {
             bootstrap.group(bossGroup,workerGroup)
                     .channel(NioServerSocketChannel.class)
+                    .option(NioChannelOption.TCP_NODELAY, true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel socketChannel) throws Exception {
@@ -40,8 +42,6 @@ public class ProxyServerBoot {
                              pipeline.addLast(new MLengthFieldBasedFrameDecoder());
                              pipeline.addLast(new ProxyMessageDecoder());
                              pipeline.addLast(new ProxyMessageEncoder());
-                             //n秒内未收到请求，触发userEventTriggered
-                             socketChannel.pipeline().addLast(new IdleStateHandler(Config.readerIdleTime, 0, 0, TimeUnit.SECONDS));
                              //处理数据
                              pipeline.addLast(new ServerMessageHandler());
                         }

@@ -3,12 +3,10 @@ package com.xm.netty_proxy_client.boot;
 import com.xm.netty_proxy_client.config.Config;
 import com.xm.netty_proxy_client.localHandler.XUnificationServerHandler;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioChannelOption;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,6 +27,7 @@ public class ProxyClientBoot {
             serverBootstrap
                     .group(bossGroup,workGroup)
                     .channel(NioServerSocketChannel.class)
+                    .option(NioChannelOption.TCP_NODELAY,true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel socketChannel) throws Exception {

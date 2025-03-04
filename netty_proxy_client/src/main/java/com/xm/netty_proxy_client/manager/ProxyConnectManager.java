@@ -6,24 +6,21 @@ import com.xm.netty_proxy_common.callback.ConnectCallBack;
 import com.xm.netty_proxy_common.decoder.MLengthFieldBasedFrameDecoder;
 import com.xm.netty_proxy_common.decoder.ProxyMessageDecoder;
 import com.xm.netty_proxy_common.encoder.ProxyMessageEncoder;
-import com.xm.netty_proxy_common.msg.ProxyMessage;
 import com.xm.netty_proxy_common.msg.ProxyMessageManager;
 import com.xm.netty_proxy_common.msg.ProxyRequest;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.pool.ChannelPoolHandler;
 import io.netty.channel.pool.FixedChannelPool;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.timeout.IdleStateHandler;
-import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.FutureListener;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class ProxyConnectManager {
@@ -61,8 +58,6 @@ public class ProxyConnectManager {
                     //解析数据
                     pipeline.addLast(new ProxyMessageEncoder());
                     pipeline.addLast(new ProxyMessageDecoder());
-                    //20秒一次发送心跳
-                    pipeline.addLast(new IdleStateHandler(0, Config.writerIdleTime, 0, TimeUnit.SECONDS));
                 }
             },Config.clientPoolSize);
         }else {
@@ -74,8 +69,6 @@ public class ProxyConnectManager {
                     //解析数据
                     pipeline.addLast(new ProxyMessageEncoder());
                     pipeline.addLast(new ProxyMessageDecoder());
-                    //20秒一次发送心跳
-                    pipeline.addLast(new IdleStateHandler(0, Config.writerIdleTime, 0, TimeUnit.SECONDS));
                 }
             });
         }
@@ -119,7 +112,6 @@ public class ProxyConnectManager {
                     Channel channel = channelFuture.getNow();
                     if (!channel.isActive()){
                         log.error("[代理池]代理池获取连接未激活，重新获取");
-                        fixedChannelPool.release(channel);
                         getProxyConnect(connectCallBack, localChannel, proxyRequest);
                     }else {
                         //发送建立连接请求

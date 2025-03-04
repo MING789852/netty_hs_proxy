@@ -42,7 +42,7 @@ public class XUnificationServerHandler extends SocksPortUnificationServerHandler
                 default:
                     p.addLast(new HttpRequestDecoder(),
                             new HttpResponseEncoder(),
-                            new HttpObjectAggregator(3 * 1024 * 1024),
+                            new HttpObjectAggregator(16*1024*1024),
                             new HttpServerProxyClientHandler());
                     in.retain();
                     in.readerIndex(0);

@@ -7,33 +7,19 @@ import com.xm.netty_proxy_common.msg.ProxyMessageType;
 import com.xm.netty_proxy_server.config.Config;
 import com.xm.netty_proxy_server.manager.ProxyConnectManager;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.*;
-import io.netty.handler.timeout.IdleState;
-import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessage> {
 
     @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
-        if (evt instanceof IdleStateEvent) {
-            IdleStateEvent event = (IdleStateEvent) evt;
-            if (IdleState.READER_IDLE.equals((event.state()))) {
-                log.info("[代理服务]未收到代理客户端心跳请求，尝试发送心跳连接检测是否存在");
-                ctx.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapPing()).addListener(ChannelFutureListener.CLOSE_ON_FAILURE) ;
-            }
-        }
-    }
-
-    @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyMessage proxyMessage) {
         Channel serverChannel=channelHandlerContext.channel();
         //验证账号密码是否正确
         if (Config.username.equals(proxyMessage.getUsername())&&Config.password.equals(proxyMessage.getPassword())){
-            if (ProxyMessageType.PING==proxyMessage.getType()){
-                log.info("[代理服务]接收到代理客户端->{}心跳请求",serverChannel.id().asShortText());
-            }
             if (ProxyMessageType.BUILD_CONNECT==proxyMessage.getType()){
                 ProxyConnectManager.connect(proxyMessage.getTargetHost(), proxyMessage.getTargetPort(), new ConnectCallBack() {
                     @Override
@@ -65,7 +51,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                 log.info("[代理服务]接收到客户端断开连接请求");
                 Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
                 if (connectChannel!=null){
-                    connectChannel.close();
+                    connectChannel.flush().close();
                 }
                 ProxyConnectManager.unBindChannel(serverChannel);
                 //通知客户端关闭完成

@@ -38,7 +38,7 @@ public class HttpServerProxyClientHandler extends SimpleChannelInboundHandler<Fu
                 @Override
                 public void success(Channel proxyServerChannel,boolean isPoolChannel) {
                     // CONNECT 请求回复连接建立成功
-                    HttpResponse connectedResponse = new DefaultHttpResponse(httpRequest.protocolVersion(), new HttpResponseStatus(200, "Connection Established"));
+                    HttpResponse connectedResponse = new DefaultHttpResponse(httpRequest.protocolVersion(), new HttpResponseStatus(HttpResponseStatus.OK.code(), "Connection Established"));
                     localChannel.writeAndFlush(connectedResponse).addListener((ChannelFutureListener) channelFuture -> {
                         if (channelFuture.isSuccess()){
                             localChannel.pipeline().remove(HttpRequestDecoder.class);

@@ -8,13 +8,10 @@ public class Config {
 
     public static final int serverPort;
 
-    public static final int readerIdleTime;
-
     static {
         ResourceBundle bundle = ResourceBundle.getBundle("application");
         username = bundle.getString("username");
         password= bundle.getString("password");
         serverPort= Integer.parseInt(bundle.getString("server.port"));
-        readerIdleTime= Integer.parseInt(bundle.getString("server.readerIdleTime"));
     }
 }

@@ -2,20 +2,20 @@ package com.xm.netty_proxy_server.manager;
 
 import com.xm.netty_proxy_common.callback.ConnectCallBack;
 import com.xm.netty_proxy_common.key.Constants;
-import com.xm.netty_proxy_common.msg.ProxyMessage;
 import com.xm.netty_proxy_common.msg.ProxyMessageManager;
-import com.xm.netty_proxy_common.msg.ProxyMessageType;
 import com.xm.netty_proxy_server.config.Config;
 import com.xm.netty_proxy_server.proxyHandler.ProxyMessageHandler;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioChannelOption;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
-import io.netty.util.ReferenceCountUtil;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -32,7 +32,8 @@ public class ProxyConnectManager {
                 .group(new NioEventLoopGroup())
                 .channel(NioSocketChannel.class)
                 .handler(new LoggingHandler(LogLevel.INFO))
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS,10000)
+                .option(NioChannelOption.TCP_NODELAY, true)
+                .option(NioChannelOption.CONNECT_TIMEOUT_MILLIS,2000)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel socketChannel) throws Exception {
