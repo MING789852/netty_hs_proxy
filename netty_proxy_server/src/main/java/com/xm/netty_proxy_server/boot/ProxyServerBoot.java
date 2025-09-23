@@ -35,6 +35,7 @@ public class ProxyServerBoot {
             bootstrap.group(bossGroup,workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .childOption(NioChannelOption.TCP_NODELAY, true)
+                    .childOption(NioChannelOption.SO_KEEPALIVE, true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel socketChannel) throws Exception {

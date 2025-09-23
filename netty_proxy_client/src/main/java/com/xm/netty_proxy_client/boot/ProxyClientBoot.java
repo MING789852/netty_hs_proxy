@@ -36,7 +36,13 @@ public class ProxyClientBoot {
                         }
                     });
             log.debug("bind port : {}", port);
-            ChannelFuture future = serverBootstrap.bind(port);
+            ChannelFuture future = serverBootstrap.bind(port).sync();
+            if (!future.isSuccess()) {
+                // 绑定端口失败，打印异常信息
+                log.error("Failed to bind to port",future.cause());
+                // 通常这里应该处理错误，例如尝试其他端口或停止启动
+                return;
+            }
             future.channel().closeFuture().sync();
         } catch (InterruptedException e) {
             log.error("启动失败");

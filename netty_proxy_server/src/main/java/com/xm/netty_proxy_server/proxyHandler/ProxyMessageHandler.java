@@ -18,7 +18,7 @@ public class ProxyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) {
+    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) throws Exception {
         Channel connectChannel=ctx.channel();
         Channel serverChannel=connectChannel.attr(Constants.NEXT_CHANNEL).get();
         //回写数据
@@ -27,7 +27,14 @@ public class ProxyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
             byteBuf.retain();
             serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(byteBuf));
         }else {
-            log.debug("[代理目标连接]目标地址->{},代理服务连接不存在，无法回写",connectChannel.remoteAddress());
+            connectChannel.flush().close().sync();
+            String msg;
+            if (serverChannel==null){
+                msg="代理服务连接不存在";
+            }else {
+                msg="代理服务连接已断开";
+            }
+            log.error("[代理目标连接]目标地址->{},{}，无法回写",connectChannel.remoteAddress(),msg);
         }
     }
 
@@ -37,8 +44,8 @@ public class ProxyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
         Channel serverChannel=connectChannel.attr(Constants.NEXT_CHANNEL).get();
         if (serverChannel!=null&&serverChannel.isActive()){
             serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapServerProxyClose());
+            ProxyConnectManager.unBindChannel(serverChannel);
         }
-        ProxyConnectManager.unBindChannel(serverChannel);
         log.info("[代理目标连接]目标地址->{},连接关闭",ctx.channel().remoteAddress());
         super.channelInactive(ctx);
     }

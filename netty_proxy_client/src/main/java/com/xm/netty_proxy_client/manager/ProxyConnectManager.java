@@ -9,10 +9,7 @@ import com.xm.netty_proxy_common.encoder.ProxyMessageEncoder;
 import com.xm.netty_proxy_common.msg.ProxyMessageManager;
 import com.xm.netty_proxy_common.msg.ProxyRequest;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelPipeline;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.pool.ChannelPoolHandler;
 import io.netty.channel.pool.FixedChannelPool;
@@ -34,6 +31,8 @@ public class ProxyConnectManager {
 
     static {
         bootstrap
+                .option(ChannelOption.SO_KEEPALIVE, true)
+                .option(ChannelOption.TCP_NODELAY, true)
                 .group(new NioEventLoopGroup())
                 .channel(NioSocketChannel.class);
         proxyMessageManager=new ProxyMessageManager(Config.username,Config.password);

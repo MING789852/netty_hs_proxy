@@ -15,8 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessage> {
 
+
     @Override
-    protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyMessage proxyMessage) {
+    protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyMessage proxyMessage) throws  Exception {
         Channel serverChannel=channelHandlerContext.channel();
         //验证账号密码是否正确
         if (Config.username.equals(proxyMessage.getUsername())&&Config.password.equals(proxyMessage.getPassword())){
@@ -24,15 +25,15 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                 ProxyConnectManager.connect(proxyMessage.getTargetHost(), proxyMessage.getTargetPort(), new ConnectCallBack() {
                     @Override
                     public void success(Channel connectChannel,boolean isPoolChannel) {
-                        //绑定连接
-                        ProxyConnectManager.bindChannel(serverChannel,connectChannel);
                         //发送连接成功回调
                         serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager()
                                 .wrapConnectSuccess(proxyMessage.getTargetHost(),proxyMessage.getTargetPort())).addListener(future -> {
                            if (future.isSuccess()){
+                               //绑定连接
+                               ProxyConnectManager.bindChannel(serverChannel,connectChannel);
                                connectChannel.config().setAutoRead(true);
                            }else {
-                               connectChannel.flush().close();
+                               connectChannel.flush().close().sync();
                            }
                         });
                     }
@@ -52,13 +53,24 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                     byteBuf.writeBytes(proxyMessage.getData());
                     log.debug("[代理服务]转发数据到代理目标");
                     connectChannel.writeAndFlush(byteBuf);
+                }else {
+                    if (connectChannel==null){
+                        log.debug("[代理服务]转发数据到代理目标失败，代理目标不存在");
+                    }else {
+                        log.debug("[代理服务]转发数据到代理目标失败，代理目标已断开");
+                    }
+                    if (serverChannel.isActive()){
+                        serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapServerProxyClose());
+                        ProxyConnectManager.unBindChannel(serverChannel);
+                    }
                 }
             }
             if (ProxyMessageType.NOTIFY_SERVER_CLOSE==proxyMessage.getType()){
                 log.info("[代理服务]接收到客户端断开连接请求");
                 Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
                 if (connectChannel!=null&&connectChannel.isActive()){
-                    connectChannel.flush().close();
+                    connectChannel.flush().close().sync();
+                    serverChannel.flush();
                 }
                 ProxyConnectManager.unBindChannel(serverChannel);
                 //通知客户端关闭完成
@@ -73,7 +85,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
         Channel serverChannel = ctx.channel();
         Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
         if (connectChannel!=null&&connectChannel.isActive()){
-            connectChannel.flush().close();
+            connectChannel.flush().close().sync();
         }
         ProxyConnectManager.unBindChannel(serverChannel);
         super.channelInactive(ctx);
