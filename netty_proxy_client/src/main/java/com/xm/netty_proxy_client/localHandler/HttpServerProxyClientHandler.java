@@ -50,7 +50,7 @@ public class HttpServerProxyClientHandler extends SimpleChannelInboundHandler<Fu
 
                             log.info("[http代理客户端]连接代理服务器成功");
                         }else {
-                            log.error("[http代理客户端]连接代理服务器失败，无法回写建立代理连接成功响应,归还代理连接");
+                            log.error("[http代理客户端]回写本地失败,归还代理连接");
                             ProxyConnectManager.returnProxyConnect(proxyServerChannel);
                         }
                     });
