@@ -13,17 +13,6 @@ public class ProxyMessageManager {
         this.password = password;
     }
 
-    public ProxyMessage wrapPing(){
-        ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessageType.PING);
-        proxyMessage.setUsername(username);
-        proxyMessage.setPassword(password);
-        proxyMessage.setTargetHost("9");
-        proxyMessage.setTargetPort(9);
-        proxyMessage.setData("9".getBytes());
-        return proxyMessage;
-    }
-
     public ProxyMessage wrapServerProxyFail(String host, int port){
         ProxyMessage proxyMessage=new ProxyMessage();
         proxyMessage.setType(ProxyMessageType.SERVER_PROXY_FAIL);
@@ -32,6 +21,19 @@ public class ProxyMessageManager {
         proxyMessage.setTargetHost(host);
         proxyMessage.setTargetPort(port);
         proxyMessage.setData("4".getBytes());
+
+        return proxyMessage;
+    }
+
+
+    public ProxyMessage wrapServerProxyClose(){
+        ProxyMessage proxyMessage=new ProxyMessage();
+        proxyMessage.setType(ProxyMessageType.SERVER_PROXY_CLOSE);
+        proxyMessage.setUsername(username);
+        proxyMessage.setPassword(password);
+        proxyMessage.setTargetHost("8");
+        proxyMessage.setTargetPort(8);
+        proxyMessage.setData("8".getBytes());
 
         return proxyMessage;
     }

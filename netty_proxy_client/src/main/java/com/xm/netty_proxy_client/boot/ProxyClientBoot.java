@@ -35,7 +35,7 @@ public class ProxyClientBoot {
                             pipeline.addLast(new XUnificationServerHandler());
                         }
                     });
-            log.debug("bind port : " + port);
+            log.debug("bind port : {}", port);
             ChannelFuture future = serverBootstrap.bind(port);
             future.channel().closeFuture().sync();
         } catch (InterruptedException e) {

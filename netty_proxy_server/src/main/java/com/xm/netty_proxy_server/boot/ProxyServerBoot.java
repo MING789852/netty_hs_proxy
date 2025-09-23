@@ -46,7 +46,7 @@ public class ProxyServerBoot {
                              pipeline.addLast(new ServerMessageHandler());
                         }
                     });
-            log.debug("bind port : " + port);
+            log.debug("bind port : {}", port);
             ChannelFuture future = bootstrap.bind(port);
             future.channel().closeFuture().sync();
         } catch (InterruptedException e) {

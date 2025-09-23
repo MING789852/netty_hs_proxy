@@ -41,26 +41,30 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
                 ProxyConnectManager.returnProxyConnect(proxyChannel);
             }
         }else if (ProxyMessageType.SERVER_PROXY_FAIL==proxyMessage.getType()){
-            log.info("[代理客户端]接收到代理服务器连接失败,关闭本地连接,归还代理连接\n{}:{}",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
+            log.info("[代理客户端]接收到服务端代理连接失败,关闭本地连接,归还代理连接\n{}:{}",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
+            //关闭本地连接
+            localChannel.flush().close();
+            //归还代理连接
+            ProxyConnectManager.returnProxyConnect(proxyChannel);
+        }else if (ProxyMessageType.SERVER_PROXY_CLOSE==proxyMessage.getType()){
+            log.info("[代理客户端]接收到服务端代理已关闭通知,关闭本地连接,归还代理连接");
             //关闭本地连接
             localChannel.flush().close();
             //归还代理连接
             ProxyConnectManager.returnProxyConnect(proxyChannel);
         }else if (ProxyMessageType.NOTIFY_SERVER_CLOSE_ACK==proxyMessage.getType()){
-            log.info("[代理客户端]接收到代理服务器已关闭通知确认,归还代理连接");
+            log.info("[代理客户端]接收到服务端代理已关闭通知确认,归还代理连接");
             //归还代理连接
             ProxyConnectManager.returnProxyConnect(proxyChannel);
         }else {
-            log.info("[代理客户端]接收到代理服务器异常操作类型");
+            log.info("[代理客户端]接收到服务端代理异常操作类型");
         }
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        ctx.channel().flush();
-        Channel proxyChannel=ctx.channel();
-        log.info("[代理客户端]本地连接关闭,归还代理连接");
-        ProxyConnectManager.returnProxyConnect(proxyChannel);
+        localChannel.flush().close();
+        log.info("[代理客户端]代理连接关闭,归还代理连接");
         super.channelInactive(ctx);
     }
 

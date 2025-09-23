@@ -42,17 +42,17 @@ public class ProxyConnectManager {
             fixedChannelPool=new FixedChannelPool(bootstrap, new ChannelPoolHandler() {
                 @Override
                 public void channelReleased(Channel channel) {
-                    log.info("[代理池]归还连接,已连接数量->{}",fixedChannelPool.acquiredChannelCount());
+                    log.info("[代理池]归还连接,已连接数量->{},剩余连接数量->{}",fixedChannelPool.acquiredChannelCount(),Config.clientPoolSize-fixedChannelPool.acquiredChannelCount());
                 }
 
                 @Override
                 public void channelAcquired(Channel channel) {
-                    log.info("[代理池]获取连接池连接,已连接数量->{}",fixedChannelPool.acquiredChannelCount());
+                    log.info("[代理池]获取连接池连接,已连接数量->{},剩余连接数量->{}",fixedChannelPool.acquiredChannelCount(),Config.clientPoolSize-fixedChannelPool.acquiredChannelCount());
                 }
 
                 @Override
                 public void channelCreated(Channel channel) {
-                    log.info("[代理池]创建新连接,已连接数量->{}",fixedChannelPool.acquiredChannelCount());
+                    log.info("[代理池]创建新连接,已连接数量->{},剩余连接数量->{}",fixedChannelPool.acquiredChannelCount(),Config.clientPoolSize-fixedChannelPool.acquiredChannelCount());
                     ChannelPipeline pipeline=channel.pipeline();
                     pipeline.addLast(new MLengthFieldBasedFrameDecoder());
                     //解析数据
@@ -99,7 +99,8 @@ public class ProxyConnectManager {
 
     public static void returnProxyConnect(Channel proxyChannel){
         if (Config.clientOpenPool){
-            if (proxyChannel!=null) {
+            if (proxyChannel!=null&&proxyChannel.isActive()) {
+                proxyChannel.flush();
                 fixedChannelPool.release(proxyChannel);
             }
         }

@@ -26,8 +26,6 @@ public class HttpServerProxyClientHandler extends SimpleChannelInboundHandler<Fu
             // 解析目标主机host和端口号
             HostAndPort hostAndPort = parseHostAndPort(httpRequest, isConnectMethod);
             log.info("[http代理客户端]代理目标->{}",hostAndPort);
-            // disable AutoRead until remote connection is ready
-            localChannel.config().setAutoRead(false);
 
             //设置代理信息
             ProxyRequest proxyRequest=new ProxyRequest();

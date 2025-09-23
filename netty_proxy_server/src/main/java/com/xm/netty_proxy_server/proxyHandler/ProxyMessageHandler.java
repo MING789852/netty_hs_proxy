@@ -5,38 +5,42 @@ import com.xm.netty_proxy_server.manager.ProxyConnectManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.util.ReferenceCountUtil;
+import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class ProxyMessageHandler extends ChannelInboundHandlerAdapter {
+public class ProxyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        ctx.channel().config().setAutoRead(false);
         super.channelActive(ctx);
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) {
         Channel connectChannel=ctx.channel();
         Channel serverChannel=connectChannel.attr(Constants.NEXT_CHANNEL).get();
         //回写数据
-        if (serverChannel!=null){
-            ByteBuf byteBuf= (ByteBuf) msg;
+        if (serverChannel!=null&&serverChannel.isActive()){
             log.debug("[代理目标连接]目标地址->{},回写数据",connectChannel.remoteAddress());
+            byteBuf.retain();
             serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(byteBuf));
         }else {
             log.debug("[代理目标连接]目标地址->{},代理服务连接不存在，无法回写",connectChannel.remoteAddress());
-            ReferenceCountUtil.release(msg);
         }
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        ctx.channel().flush();
-        super.channelInactive(ctx);
+        Channel connectChannel=ctx.channel();
+        Channel serverChannel=connectChannel.attr(Constants.NEXT_CHANNEL).get();
+        if (serverChannel!=null&&serverChannel.isActive()){
+            serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapServerProxyClose());
+        }
+        ProxyConnectManager.unBindChannel(serverChannel);
         log.info("[代理目标连接]目标地址->{},连接关闭",ctx.channel().remoteAddress());
+        super.channelInactive(ctx);
     }
 
     @Override

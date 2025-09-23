@@ -27,7 +27,14 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                         //绑定连接
                         ProxyConnectManager.bindChannel(serverChannel,connectChannel);
                         //发送连接成功回调
-                        serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapConnectSuccess(proxyMessage.getTargetHost(),proxyMessage.getTargetPort()));
+                        serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager()
+                                .wrapConnectSuccess(proxyMessage.getTargetHost(),proxyMessage.getTargetPort())).addListener(future -> {
+                           if (future.isSuccess()){
+                               connectChannel.config().setAutoRead(true);
+                           }else {
+                               connectChannel.flush().close();
+                           }
+                        });
                     }
 
                     @Override
@@ -40,7 +47,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
             }
             if (ProxyMessageType.TRANSFER==proxyMessage.getType()){
                 Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
-                if (connectChannel!=null){
+                if (connectChannel!=null&&connectChannel.isActive()){
                     ByteBuf byteBuf = channelHandlerContext.alloc().buffer(proxyMessage.getData().length);
                     byteBuf.writeBytes(proxyMessage.getData());
                     log.debug("[代理服务]转发数据到代理目标");
@@ -50,7 +57,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
             if (ProxyMessageType.NOTIFY_SERVER_CLOSE==proxyMessage.getType()){
                 log.info("[代理服务]接收到客户端断开连接请求");
                 Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
-                if (connectChannel!=null){
+                if (connectChannel!=null&&connectChannel.isActive()){
                     connectChannel.flush().close();
                 }
                 ProxyConnectManager.unBindChannel(serverChannel);
@@ -63,9 +70,13 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        super.channelInactive(ctx);
         Channel serverChannel = ctx.channel();
+        Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
+        if (connectChannel!=null&&connectChannel.isActive()){
+            connectChannel.flush().close();
+        }
         ProxyConnectManager.unBindChannel(serverChannel);
+        super.channelInactive(ctx);
     }
 
 
