@@ -31,10 +31,10 @@ public class SendProxyMessageHandler extends SimpleChannelInboundHandler<ByteBuf
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        log.info("[本地连接]{}执行关闭操作",ctx.channel().remoteAddress());
+        log.info("[本地连接]{}执行关闭操作,并归还代理连接",ctx.channel().remoteAddress());
         //发送客户端断开连接
-        proxyChannel.flush();
         proxyChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapNotifyServerClose());
+        ProxyConnectManager.returnProxyConnect(proxyChannel);
         super.channelInactive(ctx);
     }
 

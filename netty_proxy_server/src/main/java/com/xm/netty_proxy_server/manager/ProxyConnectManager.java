@@ -33,7 +33,7 @@ public class ProxyConnectManager {
                 .channel(NioSocketChannel.class)
                 .handler(new LoggingHandler(LogLevel.INFO))
                 .option(NioChannelOption.TCP_NODELAY, true)
-                .option(NioChannelOption.CONNECT_TIMEOUT_MILLIS,2000)
+                .option(NioChannelOption.CONNECT_TIMEOUT_MILLIS,1000)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel socketChannel) throws Exception {
@@ -47,10 +47,8 @@ public class ProxyConnectManager {
         bootstrap.connect(host,port).addListener((ChannelFutureListener) channelFuture -> {
             if (channelFuture.isSuccess()){
                 //添加数据回调处理
-                log.info("[代理服务]连接成功->{}:{}",host,port);
                 connectCallBack.success(channelFuture.channel(),false);
             }else {
-                log.info("[代理服务]连接失败->{}:{}",host,port);
                 connectCallBack.error(channelFuture.channel());
             }
         });
@@ -76,9 +74,9 @@ public class ProxyConnectManager {
     }
 
     public static  void  notifyServerProxyFail(Channel serverChannel,String host,int port) {
-        unBindChannel(serverChannel);
         if (serverChannel!=null) {
             serverChannel.writeAndFlush(proxyMessageManager.wrapServerProxyFail(host,port));
+            unBindChannel(serverChannel);
         }
     }
 }

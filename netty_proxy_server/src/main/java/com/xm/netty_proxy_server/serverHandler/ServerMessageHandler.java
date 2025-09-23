@@ -25,6 +25,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                 ProxyConnectManager.connect(proxyMessage.getTargetHost(), proxyMessage.getTargetPort(), new ConnectCallBack() {
                     @Override
                     public void success(Channel connectChannel,boolean isPoolChannel) {
+                        log.info("[代理服务]连接成功->{}:{}",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
                         //发送连接成功回调
                         serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager()
                                 .wrapConnectSuccess(proxyMessage.getTargetHost(),proxyMessage.getTargetPort())).addListener(future -> {
@@ -41,7 +42,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                     @Override
                     public void error(Channel connectChannel) {
                         //通知客户端关闭连接
-                        log.info("[代理服务]通知客户端代理连接->{}:{}失败",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
+                        log.error("[代理服务]通知客户端代理连接->{}:{}失败",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
                         ProxyConnectManager.notifyServerProxyFail(serverChannel,proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
                     }
                 });
@@ -55,9 +56,9 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                     connectChannel.writeAndFlush(byteBuf);
                 }else {
                     if (connectChannel==null){
-                        log.debug("[代理服务]转发数据到代理目标失败，代理目标不存在");
+                        log.error("[代理服务]转发数据到代理目标失败，代理目标不存在");
                     }else {
-                        log.debug("[代理服务]转发数据到代理目标失败，代理目标已断开");
+                        log.error("[代理服务]转发数据到代理目标失败，代理目标已断开");
                     }
                     if (serverChannel.isActive()){
                         serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapServerProxyClose());
@@ -66,7 +67,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
                 }
             }
             if (ProxyMessageType.NOTIFY_SERVER_CLOSE==proxyMessage.getType()){
-                log.info("[代理服务]接收到客户端断开连接请求");
+                log.debug("[代理服务]接收到客户端断开连接请求");
                 Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
                 if (connectChannel!=null&&connectChannel.isActive()){
                     connectChannel.flush().close().sync();

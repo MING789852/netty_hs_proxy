@@ -27,7 +27,6 @@ public class ProxyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
             byteBuf.retain();
             serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(byteBuf));
         }else {
-            connectChannel.flush().close().sync();
             String msg;
             if (serverChannel==null){
                 msg="代理服务连接不存在";
@@ -35,6 +34,7 @@ public class ProxyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
                 msg="代理服务连接已断开";
             }
             log.error("[代理目标连接]目标地址->{},{}，无法回写",connectChannel.remoteAddress(),msg);
+            connectChannel.flush().close().sync();
         }
     }
 

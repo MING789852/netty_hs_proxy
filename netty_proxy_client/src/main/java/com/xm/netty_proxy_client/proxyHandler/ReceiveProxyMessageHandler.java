@@ -31,7 +31,7 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
         if (ProxyMessageType.CONNECT_SUCCESS==proxyMessage.getType()){
             connectCallBack.success(proxyChannel,isPoolChannel);
         }else if (ProxyMessageType.TRANSFER==proxyMessage.getType()){
-            if (localChannel.isActive()){
+            if (localChannel!=null&&localChannel.isActive()){
                 ByteBuf byteBuf = channelHandlerContext.alloc().buffer(proxyMessage.getData().length);
                 log.info("[代理客户端]开始回写数据到本地,目标->{}",localChannel.remoteAddress());
                 byteBuf.writeBytes(proxyMessage.getData());
@@ -41,13 +41,13 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
                 ProxyConnectManager.returnProxyConnect(proxyChannel);
             }
         }else if (ProxyMessageType.SERVER_PROXY_FAIL==proxyMessage.getType()){
-            log.info("[代理客户端]接收到服务端代理连接失败,关闭本地连接,归还代理连接\n{}:{}",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
+            log.info("[代理客户端]接收到服务端代理连接目标失败,关闭本地连接,归还代理连接\n{}:{}",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
             //关闭本地连接
             localChannel.flush().close().sync();
             //归还代理连接
             ProxyConnectManager.returnProxyConnect(proxyChannel);
         }else if (ProxyMessageType.SERVER_PROXY_CLOSE==proxyMessage.getType()){
-            log.info("[代理客户端]接收到服务端代理已关闭通知,关闭本地连接,归还代理连接");
+            log.info("[代理客户端]接收到服务端代理目标已关闭通知,关闭本地连接,归还代理连接");
             //关闭本地连接
             localChannel.flush().close().sync();
             //归还代理连接
@@ -64,7 +64,7 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         localChannel.flush().close().sync();
-        log.info("[代理客户端]代理连接关闭,归还代理连接");
+        log.info("[代理客户端]代理连接关闭");
         super.channelInactive(ctx);
     }
 
