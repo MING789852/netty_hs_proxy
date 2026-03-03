@@ -5,119 +5,199 @@ import com.xm.netty_proxy_client.manager.ProxyConnectManager;
 import com.xm.netty_proxy_client.proxyHandler.SendProxyMessageHandler;
 import com.xm.netty_proxy_common.callback.ConnectCallBack;
 import com.xm.netty_proxy_common.msg.ProxyRequest;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.*;
-import lombok.Data;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.*;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.charset.StandardCharsets;
+
 @Slf4j
-public class HttpServerProxyClientHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
+public class HttpServerProxyClientHandler extends SimpleChannelInboundHandler<ByteBuf> {
+
+    // 目标服务器信息
+    private final String targetHost;
+    private final int targetPort;
+    private final String httpMethod;
+    private final boolean isConnectMethod;
+    private  ByteBuf firstByteBuf;
+
+    public HttpServerProxyClientHandler(String targetHost, int targetPort, String httpMethod) {
+        this.targetHost = targetHost;
+        this.targetPort = targetPort;
+        this.httpMethod = httpMethod;
+        this.isConnectMethod = "CONNECT".equalsIgnoreCase(httpMethod);
+    }
+
 
     @Override
-    protected void channelRead0(ChannelHandlerContext channelHandlerContext, FullHttpRequest httpRequest) {
-        if (httpRequest.decoderResult().isSuccess()){
-            Channel localChannel = channelHandlerContext.channel();
+    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) {
+        firstByteBuf = byteBuf.retain();
+        // 建立代理通道
+        processHttpRequest(ctx);
+    }
 
-            boolean isConnectMethod = HttpMethod.CONNECT.equals(httpRequest.method());
+    /**
+     * 处理HTTP请求
+     */
+    private void processHttpRequest(ChannelHandlerContext ctx) {
+        Channel localChannel = ctx.channel();
+        try {
+            // 1. 创建代理请求
+            ProxyRequest proxyRequest = new ProxyRequest();
+            proxyRequest.setTargetHost(targetHost);
+            proxyRequest.setTargetPort(targetPort);
 
-            // 解析目标主机host和端口号
-            HostAndPort hostAndPort = parseHostAndPort(httpRequest, isConnectMethod);
-            log.info("[http代理客户端]代理目标->{}",hostAndPort);
-
-            //设置代理信息
-            ProxyRequest proxyRequest=new ProxyRequest();
-            proxyRequest.setTargetHost(hostAndPort.getHost());
-            proxyRequest.setTargetPort(hostAndPort.getPort());
-
+            // 2. 获取代理连接
             ProxyConnectManager.getProxyConnect(new ConnectCallBack() {
                 @Override
-                public void success(Channel proxyServerChannel,boolean isPoolChannel) {
-                    // CONNECT 请求回复连接建立成功
-                    HttpResponse connectedResponse = new DefaultHttpResponse(httpRequest.protocolVersion(), new HttpResponseStatus(HttpResponseStatus.OK.code(), "Connection Established"));
-                    localChannel.writeAndFlush(connectedResponse).addListener((ChannelFutureListener) channelFuture -> {
-                        if (channelFuture.isSuccess()){
-                            localChannel.pipeline().remove(HttpRequestDecoder.class);
-                            localChannel.pipeline().remove(HttpResponseEncoder.class);
-                            localChannel.pipeline().remove(HttpObjectAggregator.class);
-                            localChannel.pipeline().remove(HttpServerProxyClientHandler.this);
-                            localChannel.pipeline().addLast(Config.SendProxyMessageHandler,new SendProxyMessageHandler(proxyServerChannel));
-
-                            // connection is ready, enable AutoRead
-                            localChannel.config().setAutoRead(true);
-
-                            log.info("[http代理客户端]连接代理服务器成功");
-                        }else {
-                            log.error("[http代理客户端]回写本地失败,归还代理连接");
-                            ProxyConnectManager.returnProxyConnect(proxyServerChannel);
-                        }
-                    });
+                public void success(Channel proxyServerChannel) {
+                    if (!localChannel.isActive()) {
+                        log.warn("【HTTP快速代理】【目标->{}:{}】本地通道已关闭，放弃建立代理", targetHost, targetPort);
+                        return;
+                    }
+                    try {
+                        handleProxyConnected(ctx, proxyServerChannel);
+                    } catch (Exception e) {
+                        log.error("【HTTP快速代理】【目标->{}:{}】处理代理连接成功时发生异常", targetHost, targetPort, e);
+                        sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Internal Server Error");
+                    }
                 }
+
                 @Override
                 public void error(Channel proxyServerChannel) {
-                    log.error("[http代理客户端]连接代理服务器失败,归还代理连接");
-                    ProxyConnectManager.returnProxyConnect(proxyServerChannel);
+                    log.error("【HTTP快速代理】【目标->{}:{}】连接代理服务器失败", targetHost, targetPort);
+                    sendErrorResponse(ctx, HttpResponseStatus.BAD_GATEWAY, "Proxy Server Unavailable");
                 }
-            },localChannel,proxyRequest);
-        }else {
-            log.error("[http代理客户端]解析FullHttpRequest失败");
+            }, ctx.channel(), proxyRequest);
+
+        } catch (Exception e) {
+            log.error("【HTTP快速代理】【目标->{}:{}】处理HTTP请求时发生异常", targetHost, targetPort, e);
+            sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Internal Server Error");
         }
     }
 
     /**
-     * 解析header信息，建立连接
-     * HTTP 请求头如下
-     * GET http://www.baidu.com/ HTTP/1.1
-     * Host: www.baidu.com
-     * User-Agent: curl/7.69.1
-     * Proxy-Connection:Keep-Alive
-     * ---------------------------
-     * HTTPS请求头如下
-     * CONNECT www.baidu.com:443 HTTP/1.1
-     * Host: www.baidu.com:443
-     * User-Agent: curl/7.69.1
-     * Proxy-Connection: Keep-Alive
+     * 处理代理连接建立成功
      */
-    private HostAndPort parseHostAndPort(HttpRequest httpRequest,boolean isConnectMethod) {
-        String hostAndPortStr;
+    private void handleProxyConnected(ChannelHandlerContext ctx, Channel proxyChannel) {
+        Channel localChannel = ctx.channel();
+        //区分处理
+        //CONNECT方法用于建立HTTPS隧道，是SSL/TLS加密通信的基础
         if (isConnectMethod) {
-            // CONNECT 请求以请求行为准
-            hostAndPortStr = httpRequest.uri();
+            // CONNECT 方法：建立HTTPS/SSL隧道，代理不解析后续数据，仅作TCP层转发
+            handleConnectMethod(ctx, localChannel, proxyChannel);
         } else {
-            hostAndPortStr = httpRequest.headers().get("Host");
+            // 普通HTTP方法（GET/POST等）：代理解析并转发完整的HTTP请求
+            handleHttpMethod(ctx, localChannel, proxyChannel);
         }
-        String[] hostPortArray = hostAndPortStr.split(":");
-        String host = hostPortArray[0];
-        int port;
-        if (hostPortArray.length == 2) {
-            port = Integer.parseInt(hostPortArray[1]);
-        } else if (isConnectMethod) {
-            // 没有端口号，CONNECT 请求默认443端口
-            port = 443;
-        } else {
-            // 没有端口号，普通HTTP请求默认80端口
-            port = 80;
-        }
-        return new HostAndPort(host,port);
     }
 
-    @Data
-    static class HostAndPort{
-        private String host;
-        private int port;
-        public HostAndPort(String host, int port) {
-            this.host = host;
-            this.port = port;
-        }
+    /**
+     * 处理CONNECT方法
+     */
+    private void handleConnectMethod(ChannelHandlerContext ctx, Channel localChannel, Channel proxyChannel) {
+        log.info("【HTTP快速代理】【目标->{}:{}】处理HTTPS隧道(CONNECT)", targetHost, targetPort);
+        // 发送200 Connection Established响应
+        String response = "HTTP/1.1 200 Connection Established\r\n\r\n";
+        ByteBuf responseBuf = localChannel.alloc().buffer(response.length());
+        responseBuf.writeBytes(response.getBytes(StandardCharsets.US_ASCII));
+        localChannel.writeAndFlush(responseBuf).addListener(future -> {
+            if (!future.isSuccess()) {
+                log.error("【HTTP快速代理】【目标->{}:{}】发送200响应失败", targetHost, targetPort, future.cause());
+                safeCloseResources(localChannel);
+            }else {
+                // 切换到代理模式
+                switchToProxyMode(ctx,localChannel,proxyChannel);
+            }
+        });
+    }
 
-        @Override
-        public String toString() {
-            return "HostAndPort{" +
-                    "host='" + host + '\'' +
-                    ", port=" + port +
-                    '}';
+    /**
+     * 处理普通HTTP方法
+     */
+    private void handleHttpMethod(ChannelHandlerContext ctx,Channel localChannel, Channel proxyChannel) {
+        log.info("【HTTP快速代理】【目标->{}:{}】处理普通HTTP请求: {}", targetHost, targetPort, httpMethod);
+        // 切换到代理模式
+        switchToProxyMode(ctx,localChannel,proxyChannel);
+    }
+
+
+    /**
+     * 切换到代理模式
+     */
+    private void  switchToProxyMode(ChannelHandlerContext ctx,Channel localChannel,Channel proxyChannel) {
+        try {
+            // 1. 移除当前处理器
+            ctx.pipeline().remove(this);
+
+            // 2. 添加代理消息发送处理器
+            ctx.pipeline().addLast(Config.SEND_PROXY_MESSAGE_HANDLER,
+                    new SendProxyMessageHandler(proxyChannel, targetHost, targetPort));
+
+            // 3、传送第一个请求
+            if (!isConnectMethod){
+                proxyChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(firstByteBuf)).addListener(future -> {
+                    if (!future.isSuccess()) {
+                        log.error("【HTTP快速代理】【目标->{}:{}】发送第一个请求失败", targetHost, targetPort, future.cause());
+                        safeCloseResources(localChannel);
+                    }else {
+                        firstByteBuf.release();
+                    }
+                });
+            }
+
+            // 4、恢复自动读取
+            ctx.channel().config().setAutoRead(true);
+            log.info("【HTTP快速代理】【目标->{}:{}】已切换到代理模式",targetHost,targetPort);
+        } catch (Exception e) {
+            log.error("【HTTP快速代理】【目标->{}:{}】切换到代理模式失败", targetHost, targetPort, e);
+            safeCloseResources(localChannel);
+        }
+    }
+
+    /**
+     * 发送错误响应
+     */
+    private void sendErrorResponse(ChannelHandlerContext ctx, HttpResponseStatus status, String message) {
+        try {
+            // 构造HTTP响应头
+            String responseHeader = "HTTP/1.1 " + status.code() + " " + status.reasonPhrase() + "\r\n" +
+                    "Content-Type: text/plain; charset=utf-8\r\n" +
+                    "Content-Length: " + message.getBytes(StandardCharsets.UTF_8).length + "\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n";
+
+            // 创建ByteBuf并写入响应头和消息体
+            ByteBuf responseBuf = ctx.alloc().buffer(
+                    responseHeader.length() + message.getBytes(StandardCharsets.UTF_8).length
+            );
+            responseBuf.writeBytes(responseHeader.getBytes(StandardCharsets.US_ASCII));
+            responseBuf.writeBytes(message.getBytes(StandardCharsets.UTF_8));
+
+            // 发送并关闭连接
+            ctx.writeAndFlush(responseBuf).addListener(ChannelFutureListener.CLOSE);
+        } catch (Exception e) {
+            log.error("【HTTP快速代理】【目标->{}:{}】发送错误响应失败", targetHost, targetPort, e);
+            ctx.close();
+        }
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        super.exceptionCaught(ctx, cause);
+        safeCloseResources(ctx.channel());
+    }
+
+    /**
+     * 安全关闭资源
+     */
+    private void safeCloseResources(Channel localChannel) {
+        if (localChannel != null && localChannel.isActive()) {
+            localChannel.close();
+        }
+        if (firstByteBuf!=null&&firstByteBuf.refCnt()>0){
+            firstByteBuf.release();
         }
     }
 }

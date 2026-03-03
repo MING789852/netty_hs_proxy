@@ -3,98 +3,148 @@ package com.xm.netty_proxy_server.serverHandler;
 import com.xm.netty_proxy_common.callback.ConnectCallBack;
 import com.xm.netty_proxy_common.key.Constants;
 import com.xm.netty_proxy_common.msg.ProxyMessage;
-import com.xm.netty_proxy_common.msg.ProxyMessageType;
 import com.xm.netty_proxy_server.config.Config;
 import com.xm.netty_proxy_server.manager.ProxyConnectManager;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.xm.netty_proxy_common.msg.ProxyMessageType.*;
+
 @Slf4j
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessage> {
 
+    private volatile Channel serverChannel;
+
+    private String targetHost;
+    private Integer targetPort;
 
     @Override
-    protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyMessage proxyMessage) throws  Exception {
-        Channel serverChannel=channelHandlerContext.channel();
-        //验证账号密码是否正确
-        if (Config.username.equals(proxyMessage.getUsername())&&Config.password.equals(proxyMessage.getPassword())){
-            if (ProxyMessageType.BUILD_CONNECT==proxyMessage.getType()){
-                ProxyConnectManager.connect(proxyMessage.getTargetHost(), proxyMessage.getTargetPort(), new ConnectCallBack() {
-                    @Override
-                    public void success(Channel connectChannel,boolean isPoolChannel) {
-                        log.info("[代理服务]连接成功->{}:{}",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
-                        //发送连接成功回调
-                        serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager()
-                                .wrapConnectSuccess(proxyMessage.getTargetHost(),proxyMessage.getTargetPort())).addListener(future -> {
-                           if (future.isSuccess()){
-                               //绑定连接
-                               ProxyConnectManager.bindChannel(serverChannel,connectChannel);
-                               connectChannel.config().setAutoRead(true);
-                           }else {
-                               connectChannel.flush().close().sync();
-                           }
-                        });
-                    }
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        serverChannel = ctx.channel();
+        super.channelActive(ctx);
+    }
 
-                    @Override
-                    public void error(Channel connectChannel) {
-                        //通知客户端关闭连接
-                        log.error("[代理服务]通知客户端代理连接->{}:{}失败",proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
-                        ProxyConnectManager.notifyServerProxyFail(serverChannel,proxyMessage.getTargetHost(),proxyMessage.getTargetPort());
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, ProxyMessage proxyMessage) {
+        // 验证用户名密码
+        if (!(Config.USERNAME.equals(proxyMessage.getUsername()) && Config.PASSWORD.equals(proxyMessage.getPassword()))){
+            log.error("【代理通道】【目标{}:{}】授权失败", proxyMessage.getTargetHost(), proxyMessage.getTargetPort());
+            ctx.close();
+            return;
+        }
+        byte type = proxyMessage.getType();
+        // 处理不同类型的消息
+        switch (type) {
+            case BUILD_CONNECT:
+                handleBuildConnect(proxyMessage);
+                break;
+            case TRANSFER:
+                handleTransfer(proxyMessage);
+                break;
+            case CLIENT_NOTIFY_SERVER_CLOSE:
+                handleClientNotifyServerClose();
+                break;
+            default:
+                log.error("【代理通道】【目标{}:{}】未知消息类型: {}", proxyMessage.getTargetHost(), proxyMessage.getTargetPort(), type);
+                break;
+        }
+    }
+
+
+
+    /**
+     * 处理建立连接请求
+     */
+    private void handleBuildConnect(ProxyMessage proxyMessage) {
+        this.targetHost = proxyMessage.getTargetHost();
+        this.targetPort = proxyMessage.getTargetPort();
+        ProxyConnectManager.connect(this.targetHost, this.targetPort, new ConnectCallBack() {
+            @Override
+            public void success(Channel connectChannel) {
+                // 发送连接成功响应
+                serverChannel.writeAndFlush(
+                        ProxyConnectManager.getProxyMessageManager().wrapBuildConnectSuccess(targetHost, targetPort)
+                ).addListener(future -> {
+                    if (future.isSuccess()) {
+                        // 绑定两个通道
+                        ProxyConnectManager.bindChannel(serverChannel, connectChannel);
+                        // 启用自动读取
+                        connectChannel.config().setAutoRead(true);
+                        log.info("【代理目标通道】【目标{}:{}】开始读取数据", targetHost, targetPort);
+                    } else {
+                        log.error("【代理通道】【目标{}:{}】目标通道建立失败，发送响应失败", targetHost, targetPort);
                     }
                 });
             }
-            if (ProxyMessageType.TRANSFER==proxyMessage.getType()){
-                Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
-                if (connectChannel!=null&&connectChannel.isActive()){
-                    ByteBuf byteBuf = channelHandlerContext.alloc().buffer(proxyMessage.getData().length);
-                    byteBuf.writeBytes(proxyMessage.getData());
-                    log.debug("[代理服务]转发数据到代理目标");
-                    connectChannel.writeAndFlush(byteBuf);
-                }else {
-                    if (connectChannel==null){
-                        log.error("[代理服务]转发数据到代理目标失败，代理目标不存在");
-                    }else {
-                        log.error("[代理服务]转发数据到代理目标失败，代理目标已断开");
-                    }
-                    if (serverChannel.isActive()){
-                        serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapServerProxyClose());
-                        ProxyConnectManager.unBindChannel(serverChannel);
-                    }
-                }
+
+            @Override
+            public void error(Channel connectChannel) {
+                // 通知代理客户端，代理服务器连接代理目标失败
+                serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapServerProxyTargetFail(targetHost, targetPort))
+                        .addListener(future -> {
+                            if (!future.isSuccess()) {
+                                log.error("【代理通道】【目标{}:{}】目标连接建立失败", targetHost, targetPort,future.cause());
+                            }
+                        });
             }
-            if (ProxyMessageType.NOTIFY_SERVER_CLOSE==proxyMessage.getType()){
-                log.debug("[代理服务]接收到客户端断开连接请求");
-                Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
-                if (connectChannel!=null&&connectChannel.isActive()){
-                    connectChannel.flush().close().sync();
-                    serverChannel.flush();
+        });
+    }
+
+    /**
+     * 处理数据传输
+     */
+    private void handleTransfer(ProxyMessage proxyMessage) {
+        Channel connectChannel = serverChannel.attr(Constants.NEXT_CHANNEL).get();
+        if (connectChannel != null && connectChannel.isActive()) {
+            ByteBuf byteBuf = Unpooled.wrappedBuffer(proxyMessage.getData());
+            connectChannel.writeAndFlush(byteBuf).addListener(future -> {
+                if (!future.isSuccess()) {
+                    log.error("【代理通道】【目标{}:{}】转发数据到目标通道失败", targetHost, targetPort,future.cause());
                 }
-                ProxyConnectManager.unBindChannel(serverChannel);
-                //通知客户端关闭完成
-                serverChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapNotifyServerCloseAck());
-            }
+            });
+        } else {
+            log.error("【代理通道】【目标{}:{}】无有效目标通道，无法转发数据", targetHost, targetPort);
         }
     }
 
+    /**
+     * 处理客户端关闭通知
+     */
+    private void handleClientNotifyServerClose() {
+        //安全关闭资源
+        safeCloseResources();
+        log.info("【代理通道】【目标{}:{}】接收到代理客户端断开连接请求", targetHost, targetPort);
+    }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        Channel serverChannel = ctx.channel();
-        Channel connectChannel=serverChannel.attr(Constants.NEXT_CHANNEL).get();
-        if (connectChannel!=null&&connectChannel.isActive()){
-            connectChannel.flush().close().sync();
-        }
-        ProxyConnectManager.unBindChannel(serverChannel);
+        //安全关闭资源
+        safeCloseResources();
+        log.info("【代理通道】【目标{}:{}】关闭", targetHost, targetPort);
         super.channelInactive(ctx);
     }
 
-
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("[代理服务]错误->{}",cause.getMessage());
+        //安全关闭资源
+        safeCloseResources();
+        log.error("【代理通道】【目标{}:{}】异常", targetHost, targetPort, cause);
+    }
+
+    /**
+     * 安全关闭资源
+     */
+    private void safeCloseResources() {
+        // 获取绑定的目标连接
+        Channel connectChannel = serverChannel.attr(Constants.NEXT_CHANNEL).get();
+        // 关闭目标连接
+        if (connectChannel != null && connectChannel.isActive()) {
+            connectChannel.close();
+        }
+        ProxyConnectManager.unbindChannel(serverChannel);
     }
 }

@@ -1,7 +1,6 @@
 package com.xm.netty_proxy_common.msg;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.util.ReferenceCountUtil;
 
 public class ProxyMessageManager {
 
@@ -13,9 +12,9 @@ public class ProxyMessageManager {
         this.password = password;
     }
 
-    public ProxyMessage wrapServerProxyFail(String host, int port){
+    public ProxyMessage wrapServerProxyTargetFail(String host, int port){
         ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessageType.SERVER_PROXY_FAIL);
+        proxyMessage.setType(ProxyMessageType.SERVER_PROXY_TARGET_FAIL);
         proxyMessage.setUsername(username);
         proxyMessage.setPassword(password);
         proxyMessage.setTargetHost(host);
@@ -26,9 +25,9 @@ public class ProxyMessageManager {
     }
 
 
-    public ProxyMessage wrapServerProxyClose(){
+    public ProxyMessage wrapServerProxyTargetClose(){
         ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessageType.SERVER_PROXY_CLOSE);
+        proxyMessage.setType(ProxyMessageType.SERVER_PROXY_TARGET_CLOSE);
         proxyMessage.setUsername(username);
         proxyMessage.setPassword(password);
         proxyMessage.setTargetHost("8");
@@ -38,20 +37,21 @@ public class ProxyMessageManager {
         return proxyMessage;
     }
 
-    public ProxyMessage wrapNotifyServerCloseAck(){
+    public ProxyMessage wrapClientNotifyServerClose(){
         ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessageType.NOTIFY_SERVER_CLOSE_ACK);
+        proxyMessage.setType(ProxyMessageType.CLIENT_NOTIFY_SERVER_CLOSE);
         proxyMessage.setUsername(username);
         proxyMessage.setPassword(password);
-        proxyMessage.setTargetHost("5");
-        proxyMessage.setTargetPort(5);
-        proxyMessage.setData("5".getBytes());
+        proxyMessage.setTargetHost("4");
+        proxyMessage.setTargetPort(4);
+        proxyMessage.setData("4".getBytes());
+
         return proxyMessage;
     }
 
-    public ProxyMessage wrapConnectSuccess(String host,int port){
+    public ProxyMessage wrapBuildConnectSuccess(String host,int port){
         ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessageType.CONNECT_SUCCESS);
+        proxyMessage.setType(ProxyMessageType.BUILD_CONNECT_SUCCESS);
         proxyMessage.setUsername(username);
         proxyMessage.setPassword(password);
         proxyMessage.setTargetHost(host);
@@ -73,33 +73,26 @@ public class ProxyMessageManager {
     }
 
     public ProxyMessage wrapTransferByteBuf(ByteBuf byteBuf){
-        int readableBytes= byteBuf.readableBytes();
-        if (readableBytes==0){
-            throw new RuntimeException("转发数据为null");
+        try {
+            byteBuf.retain();
+            int readableBytes= byteBuf.readableBytes();
+            byte[] data;
+            if (readableBytes==0){
+                data=new byte[0];
+            }else {
+                data=new byte[readableBytes];
+                byteBuf.readBytes(data);
+            }
+            ProxyMessage proxyMessage=new ProxyMessage();
+            proxyMessage.setType(ProxyMessageType.TRANSFER);
+            proxyMessage.setUsername(username);
+            proxyMessage.setPassword(password);
+            proxyMessage.setTargetHost("0");
+            proxyMessage.setTargetPort(0);
+            proxyMessage.setData(data);
+            return proxyMessage;
+        }finally {
+            byteBuf.release();
         }
-        ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessageType.TRANSFER);
-        proxyMessage.setUsername(username);
-        proxyMessage.setPassword(password);
-        proxyMessage.setTargetHost("0");
-        proxyMessage.setTargetPort(0);
-        byte[] data=new byte[readableBytes];
-        byteBuf.readBytes(data);
-        ReferenceCountUtil.release(byteBuf);
-        proxyMessage.setData(data);
-        return proxyMessage;
-    }
-
-
-    public ProxyMessage wrapNotifyServerClose(){
-        ProxyMessage proxyMessage=new ProxyMessage();
-        proxyMessage.setType(ProxyMessageType.NOTIFY_SERVER_CLOSE);
-        proxyMessage.setUsername(username);
-        proxyMessage.setPassword(password);
-        proxyMessage.setTargetHost("4");
-        proxyMessage.setTargetPort(4);
-        proxyMessage.setData("4".getBytes());
-
-        return proxyMessage;
     }
 }

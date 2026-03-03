@@ -3,15 +3,15 @@ package com.xm.netty_proxy_server.config;
 import java.util.ResourceBundle;
 
 public class Config {
-    public static final String username;
-    public static final String password;
+    public static final String USERNAME;
+    public static final String PASSWORD;
 
-    public static final int serverPort;
+    public static final int SERVER_PORT;
 
     static {
         ResourceBundle bundle = ResourceBundle.getBundle("application");
-        username = bundle.getString("username");
-        password= bundle.getString("password");
-        serverPort= Integer.parseInt(bundle.getString("server.port"));
+        USERNAME = bundle.getString("username");
+        PASSWORD = bundle.getString("password");
+        SERVER_PORT = Integer.parseInt(bundle.getString("server.port"));
     }
 }

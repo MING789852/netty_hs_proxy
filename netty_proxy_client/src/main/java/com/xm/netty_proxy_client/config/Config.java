@@ -3,37 +3,43 @@ package com.xm.netty_proxy_client.config;
 import java.util.ResourceBundle;
 
 public class Config {
-    public static final String SendProxyMessageHandler = "SendProxyMessageHandler";
-    public static final String ProxyServerMessageHandler = "ProxyServerMessageHandler";
-    public static final String SocksServerProxyClientHandler="SocksServerProxyClientHandler";
-    public static final String Socks5CommandRequestDecoder="Socks5CommandRequestDecoder";
+    public static final String HTTP_SERVER_PROXY_CLIENT_HANDLER = "HttpServerProxyClientHandler";
+    public static final String SEND_PROXY_MESSAGE_HANDLER = "SendProxyMessageHandler";
+    public static final String PROXY_SERVER_MESSAGE_HANDLER = "ProxyServerMessageHandler";
+    public static final String SOCKS_SERVER_PROXY_CLIENT_HANDLER ="SocksServerProxyClientHandler";
+    public static final String SOCKS5_COMMAND_REQUEST_DECODER ="Socks5CommandRequestDecoder";
 
-    public static final String username;
-    public static final String password;
+    //代理客户端连接代理服务器账号密码
+    public static final String USERNAME;
+    public static final String PASSWORD;
 
-    public static final String serverHost;
-    public static final int serverPort;
+    //代理客户端连接代理服务器信息
+    public static final String SERVER_HOST;
+    public static final int SERVER_PORT;
+    public static final int PROXY_CONNECT_TIMEOUT;
 
-    public static final int clientPort;
+    //代理客户端信息
+    public static final int CLIENT_PORT;
 
-    public static final boolean clientOpenPool;
-
-    public static final int clientPoolSize;
+    //代理客户端连接池信息
+    public static final boolean CLIENT_OPEN_POOL;
+    public static final int CLIENT_POOL_SIZE;
 
 
 
     static {
         ResourceBundle bundle = ResourceBundle.getBundle("application");
-        username = bundle.getString("username");
-        password= bundle.getString("password");
-        serverHost= bundle.getString("server.host");
-        serverPort= Integer.parseInt(bundle.getString("server.port"));
-        clientPort=Integer.parseInt(bundle.getString("client.port"));
-        clientOpenPool=Boolean.parseBoolean(bundle.getString("client.openPool"));
-        int poolSize =0;
-        if (clientOpenPool){
+        USERNAME = bundle.getString("username");
+        PASSWORD = bundle.getString("password");
+        SERVER_HOST = bundle.getString("server.host");
+        SERVER_PORT = Integer.parseInt(bundle.getString("server.port"));
+        CLIENT_PORT =Integer.parseInt(bundle.getString("client.port"));
+        CLIENT_OPEN_POOL =Boolean.parseBoolean(bundle.getString("client.openPool"));
+        PROXY_CONNECT_TIMEOUT = Integer.parseInt(bundle.getString("client.proxyConnectTimeout"));
+        int poolSize =100;
+        if (CLIENT_OPEN_POOL){
             poolSize = Integer.parseInt(bundle.getString("client.clientPoolSize"));
         }
-        clientPoolSize = poolSize;
+        CLIENT_POOL_SIZE = poolSize;
     }
 }

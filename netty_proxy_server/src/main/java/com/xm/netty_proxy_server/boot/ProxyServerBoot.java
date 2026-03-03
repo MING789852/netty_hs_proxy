@@ -59,7 +59,7 @@ public class ProxyServerBoot {
     }
 
     public static void main(String[] args) {
-        ProxyServerBoot proxySock5ServerBoot=new ProxyServerBoot(Config.serverPort);
+        ProxyServerBoot proxySock5ServerBoot=new ProxyServerBoot(Config.SERVER_PORT);
         proxySock5ServerBoot.run();
     }
 }

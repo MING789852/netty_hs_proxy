@@ -53,7 +53,7 @@ public class ProxyClientBoot {
     }
 
     public static void main(String[] args) {
-        ProxyClientBoot localSock5ClientBoot=new ProxyClientBoot(Config.clientPort);
-        localSock5ClientBoot.run();
+        ProxyClientBoot proxyClientBoot=new ProxyClientBoot(Config.CLIENT_PORT);
+        proxyClientBoot.run();
     }
 }
