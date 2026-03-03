@@ -179,17 +179,10 @@ public class ProxyConnectManager {
         }
 
         if (Config.CLIENT_OPEN_POOL) {
-            if (proxyChannel.isActive()) {
-                // 归还到连接池
-                proxyChannel.flush();
-                fixedChannelPool.release(proxyChannel);
-                log.debug("【代理池】归还连接到池中, 通道ID: {}", proxyChannel.id().asShortText());
-            } else {
-                // 通道已关闭，通知连接池
-                proxyChannel.close();
-                log.error("【代理池】通道已关闭，无法归还到连接池, 通道ID: {}",
-                        proxyChannel.id().asShortText());
-            }
+            // 归还到连接池
+            proxyChannel.flush();
+            fixedChannelPool.release(proxyChannel);
+            log.debug("【代理池】归还连接到池中, 通道ID: {}", proxyChannel.id().asShortText());
         } else {
             // 非连接池模式，直接关闭连接
             if (proxyChannel.isActive()) {
