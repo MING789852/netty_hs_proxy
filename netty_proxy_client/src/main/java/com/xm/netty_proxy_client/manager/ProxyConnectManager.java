@@ -75,15 +75,12 @@ public class ProxyConnectManager {
                     new ChannelPoolHandler() {
                         @Override
                         public void channelCreated(Channel channel) {
+                            log.info("【代理池】【新建连接】{}", getPoolStatus());
                         }
 
                         @Override
                         public void channelReleased(Channel channel) {
-                            if (channel != null && channel.isActive()) {
-                                // 清理可能残留的处理器
-                                cleanProxyHandler(channel);
-                                log.info("【代理池】【归还连接】{}", getPoolStatus());
-                            }
+                            log.info("【代理池】【归还连接】{}", getPoolStatus());
                         }
 
                         @Override
@@ -105,13 +102,23 @@ public class ProxyConnectManager {
      * 清理接收处理器
      */
     private static void cleanProxyHandler(Channel channel) {
-        if (channel != null && channel.isActive()) {
-            ChannelPipeline pipeline = channel.pipeline();
-            ReceiveProxyMessageHandler handler = pipeline.get(ReceiveProxyMessageHandler.class);
-            if (handler != null) {
-                pipeline.remove(ReceiveProxyMessageHandler.class);
-                log.debug("【代理池】清理ReceiveProxyMessageHandler, 连接ID: {}", channel.id().asShortText());
-            }
+        ChannelPipeline pipeline = channel.pipeline();
+        ReceiveProxyMessageHandler handler = pipeline.get(ReceiveProxyMessageHandler.class);
+        log.debug("【代理池】清理Handler, 连接ID: {}", channel.id().asShortText());
+        if (handler != null) {
+            pipeline.remove(ReceiveProxyMessageHandler.class);
+        }
+        MLengthFieldBasedFrameDecoder mLengthFieldBasedFrameDecoder = pipeline.get(MLengthFieldBasedFrameDecoder.class);
+        if (mLengthFieldBasedFrameDecoder != null) {
+            pipeline.remove(MLengthFieldBasedFrameDecoder.class);
+        }
+        ProxyMessageEncoder proxyMessageEncoder = pipeline.get(ProxyMessageEncoder.class);
+        if (proxyMessageEncoder != null) {
+            pipeline.remove(ProxyMessageEncoder.class);
+        }
+        ProxyMessageDecoder proxyMessageDecoder = pipeline.get(ProxyMessageDecoder.class);
+        if (proxyMessageDecoder != null) {
+            pipeline.remove(ProxyMessageDecoder.class);
         }
     }
 
