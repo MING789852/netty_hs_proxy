@@ -40,6 +40,8 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
         byte type = proxyMessage.getType();
 
         switch (type) {
+            case HEART_BEAT:
+                break;
             // 建立连接成功
             case BUILD_CONNECT_SUCCESS:
                 handleBuildConnectSuccess(proxyChannel);

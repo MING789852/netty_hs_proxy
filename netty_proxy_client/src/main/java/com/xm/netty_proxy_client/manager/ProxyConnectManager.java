@@ -75,11 +75,16 @@ public class ProxyConnectManager {
                         @Override
                         public void channelCreated(Channel channel) {
                             log.info("【代理池】【新建连接】{}", getPoolStatus());
+                            ChannelPipeline pipeline = channel.pipeline();
+                            pipeline.addLast(new MLengthFieldBasedFrameDecoder());
+                            pipeline.addLast(new ProxyMessageEncoder());
+                            pipeline.addLast(new ProxyMessageDecoder());
                         }
 
                         @Override
                         public void channelReleased(Channel channel) {
                             log.info("【代理池】【归还连接】{}", getPoolStatus());
+                            channel.flush();
                         }
 
                         @Override
@@ -97,45 +102,25 @@ public class ProxyConnectManager {
         }
     }
 
-    /**
-     * 清理接收处理器
-     */
-    private static void cleanProxyHandler(Channel channel) {
-        ChannelPipeline pipeline = channel.pipeline();
-        ReceiveProxyMessageHandler handler = pipeline.get(ReceiveProxyMessageHandler.class);
-        log.debug("【代理池】清理Handler, 连接ID: {}", channel.id().asShortText());
-        if (handler != null) {
-            pipeline.remove(ReceiveProxyMessageHandler.class);
-        }
-        MLengthFieldBasedFrameDecoder mLengthFieldBasedFrameDecoder = pipeline.get(MLengthFieldBasedFrameDecoder.class);
-        if (mLengthFieldBasedFrameDecoder != null) {
-            pipeline.remove(MLengthFieldBasedFrameDecoder.class);
-        }
-        ProxyMessageEncoder proxyMessageEncoder = pipeline.get(ProxyMessageEncoder.class);
-        if (proxyMessageEncoder != null) {
-            pipeline.remove(ProxyMessageEncoder.class);
-        }
-        ProxyMessageDecoder proxyMessageDecoder = pipeline.get(ProxyMessageDecoder.class);
-        if (proxyMessageDecoder != null) {
-            pipeline.remove(ProxyMessageDecoder.class);
-        }
-    }
-
-
     private static void addProxyHandler(ConnectCallBack connectCallBack,
                                         Channel localChannel,
                                         Channel proxyServerChannel,
                                         ProxyRequest proxyRequest){
-        // 清理旧的处理器并添加新的
-        ChannelPipeline pipeline = proxyServerChannel.pipeline();
-        cleanProxyHandler(proxyServerChannel);
+        proxyServerChannel.eventLoop().execute(() -> {
+            // 清理旧的处理器并添加新的
+            ChannelPipeline pipeline = proxyServerChannel.pipeline();
+            // 清理旧的处理器
+            ReceiveProxyMessageHandler handler = pipeline.get(ReceiveProxyMessageHandler.class);
+            if (handler != null) {
+                log.debug("【代理池】清理旧的ReceiveProxyMessageHandler");
+                pipeline.remove(ReceiveProxyMessageHandler.class);
+            }
 
-        // 添加新的接收处理器
-        pipeline.addLast(new MLengthFieldBasedFrameDecoder());
-        pipeline.addLast(new ProxyMessageEncoder());
-        pipeline.addLast(new ProxyMessageDecoder());
-        pipeline.addLast(Config.PROXY_SERVER_MESSAGE_HANDLER,
-                new ReceiveProxyMessageHandler(connectCallBack, localChannel, proxyRequest.getTargetHost(), proxyRequest.getTargetPort()));
+            // 添加新的接收处理器
+            pipeline.addLast(Config.PROXY_SERVER_MESSAGE_HANDLER,
+                    new ReceiveProxyMessageHandler(connectCallBack, localChannel, proxyRequest.getTargetHost(), proxyRequest.getTargetPort()));
+        });
+
     }
 
     /**
@@ -172,9 +157,7 @@ public class ProxyConnectManager {
 
         if (Config.CLIENT_OPEN_POOL) {
             // 归还到连接池
-            proxyChannel.flush();
             fixedChannelPool.release(proxyChannel);
-            log.debug("【代理池】归还连接到池中, 通道ID: {}", proxyChannel.id().asShortText());
         } else {
             // 非连接池模式，直接关闭连接
             if (proxyChannel.isActive()) {
