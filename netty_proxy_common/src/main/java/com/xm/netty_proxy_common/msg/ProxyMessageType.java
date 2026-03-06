@@ -1,6 +1,9 @@
 package com.xm.netty_proxy_common.msg;
 
 public class ProxyMessageType {
+
+    public static final byte HEART_BEAT = 0x00;
+
     /**
      * 建立连接
      */

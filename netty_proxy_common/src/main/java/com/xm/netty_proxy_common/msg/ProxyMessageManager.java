@@ -49,6 +49,17 @@ public class ProxyMessageManager {
         return proxyMessage;
     }
 
+    public  ProxyMessage wrapPing(){
+        ProxyMessage proxyMessage=new ProxyMessage();
+        proxyMessage.setType(ProxyMessageType.HEART_BEAT);
+        proxyMessage.setUsername(username);
+        proxyMessage.setPassword(password);
+        proxyMessage.setTargetHost("0");
+        proxyMessage.setTargetPort(0);
+        proxyMessage.setData("0".getBytes());
+        return proxyMessage;
+    }
+
     public ProxyMessage wrapBuildConnectSuccess(String host,int port){
         ProxyMessage proxyMessage=new ProxyMessage();
         proxyMessage.setType(ProxyMessageType.BUILD_CONNECT_SUCCESS);

@@ -7,9 +7,9 @@ import com.xm.netty_proxy_server.config.Config;
 import com.xm.netty_proxy_server.manager.ProxyConnectManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.*;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 import lombok.extern.slf4j.Slf4j;
 
 import static com.xm.netty_proxy_common.msg.ProxyMessageType.*;
@@ -23,6 +23,25 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProxyMessa
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         super.channelActive(ctx);
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        if (evt instanceof IdleStateEvent) {
+            IdleStateEvent event = (IdleStateEvent) evt;
+            if (IdleState.READER_IDLE.equals((event.state()))) {
+                String id = ctx.channel().id().asLongText();
+                log.debug("【代理通道】检测空闲连接->{}",id);
+                ctx.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapPing())
+                        .addListener((ChannelFutureListener) channelFuture -> {
+                            if (!channelFuture.isSuccess()) {
+                                channelFuture.channel().close();
+                                log.info("【代理通道】无心跳关闭连接->{}",id);
+                            }
+                        }) ;
+            }
+        }
+        super.userEventTriggered(ctx, evt);
     }
 
     @Override

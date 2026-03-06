@@ -63,5 +63,6 @@ public class ProxyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
         if (connectProxyChannel != null) {
             serverChannel.attr(Constants.NEXT_CHANNEL).set(null);
         }
+        serverChannel.flush();
     }
 }
