@@ -19,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class ProxyConnectManager {
@@ -146,16 +145,9 @@ public class ProxyConnectManager {
                                                 Channel localChannel,
                                                 Channel proxyServerChannel,
                                                 ProxyRequest proxyRequest) {
-
-        // 检查通道是否活跃
-        if (proxyServerChannel == null || !proxyServerChannel.isActive()) {
-            log.error("【代理池】【目标: {}:{}】代理通道不活跃", proxyRequest.getTargetHost(), proxyRequest.getTargetPort());
-            connectCallBack.error(null);
-            return;
-        }
         if (localChannel == null || !localChannel.isActive()){
             log.error("【代理池】【目标: {}:{}】本地通道不活跃", proxyRequest.getTargetHost(), proxyRequest.getTargetPort());
-            connectCallBack.error(null);
+            connectCallBack.error(proxyServerChannel);
             return;
         }
         // 发送建立连接请求
@@ -208,7 +200,7 @@ public class ProxyConnectManager {
         if (retryCounter.get() >= MAX_RETRY_COUNT) {
             log.error("【代理池】达到最大重试次数({}), 放弃获取代理连接, 请求: {}",
                     MAX_RETRY_COUNT, proxyRequest);
-            retryCounters.remove(requestKey);
+            retryCounters.remove(requestKey); // 优化：最终失败时清理计数器
             connectCallBack.error(null);
             return;
         }
@@ -231,30 +223,33 @@ public class ProxyConnectManager {
 
         fixedChannelPool.acquire().addListener((FutureListener<Channel>) channelFuture -> {
             if (channelFuture.isSuccess()) {
-                Channel channel = channelFuture.getNow();
-                if (channel != null && channel.isActive()) {
+                Channel proxyChannel = channelFuture.getNow();
+                if (proxyChannel != null && proxyChannel.isActive() && proxyChannel.isWritable()) {
                     // 成功获取连接，清理重试计数器
                     retryCounters.remove(requestKey);
-                    // 添加处理器
-                    addProxyHandler(connectCallBack, localChannel, channel, proxyRequest);
-                    // 发送建立连接请求
-                    sendBuildConnectRequest(connectCallBack, localChannel, channel, proxyRequest);
+                    // 再次检查，因为从拿到Channel到执行此任务期间，状态可能已变
+                    if (proxyChannel.isActive()) {
+                        addProxyHandler(connectCallBack, localChannel, proxyChannel, proxyRequest);
+                        sendBuildConnectRequest(connectCallBack, localChannel, proxyChannel, proxyRequest);
+                    } else {
+                        log.warn("【代理池】获取到的连接在配置处理器前已失效，重试第{}次", retryCounter.incrementAndGet());
+                        fixedChannelPool.release(proxyChannel);
+                        getProxyConnect(connectCallBack, localChannel, proxyRequest);
+                    }
                 } else {
                     // 获取的连接无效，重试
-                    log.warn("【代理池】获取到无效连接，重试第{}次", retryCounter.incrementAndGet());
-                    if (channel != null) {
-                        fixedChannelPool.release(channel);
+                    log.warn("【代理池】获取到无效或不可写连接，重试第{}次", retryCounter.incrementAndGet());
+                    if (proxyChannel != null) {
+                        fixedChannelPool.release(proxyChannel);
                     }
-                    scheduleRetry(() -> getProxyConnect(connectCallBack, localChannel, proxyRequest),
-                            retryCounter.get());
+                    getProxyConnect(connectCallBack, localChannel, proxyRequest);
                 }
             } else {
                 // 获取连接失败，重试
                 log.error("【代理池】获取连接失败, 原因: {}, 重试第{}次",
                         channelFuture.cause() != null ? channelFuture.cause().getMessage() : "未知",
                         retryCounter.incrementAndGet());
-                scheduleRetry(() -> getProxyConnect(connectCallBack, localChannel, proxyRequest),
-                        retryCounter.get());
+                getProxyConnect(connectCallBack, localChannel, proxyRequest);
             }
         });
     }
@@ -285,8 +280,7 @@ public class ProxyConnectManager {
                         log.error("【代理池】创建新代理连接失败, 原因: {}, 重试第{}次",
                                 channelFuture.cause() != null ? channelFuture.cause().getMessage() : "未知",
                                 retryCounter.incrementAndGet());
-                        scheduleRetry(() -> getProxyConnect(connectCallBack, localChannel, proxyRequest),
-                                retryCounter.get());
+                        getProxyConnect(connectCallBack, localChannel, proxyRequest);
                     }
                 });
     }
@@ -297,14 +291,6 @@ public class ProxyConnectManager {
     private static String generateRequestKey(Channel localChannel, ProxyRequest proxyRequest) {
         return localChannel.id().asLongText() + "-" +
                 proxyRequest.getTargetHost() + ":" + proxyRequest.getTargetPort();
-    }
-
-    /**
-     * 调度重试（带指数退避）
-     */
-    private static void scheduleRetry(Runnable retryTask, int retryCount) {
-        long delayMs = Math.min(1000 * (1L << (retryCount - 1)), 10000); // 指数退避，最大10秒
-        eventLoopGroup.schedule(retryTask, delayMs, TimeUnit.MILLISECONDS);
     }
 
     /**

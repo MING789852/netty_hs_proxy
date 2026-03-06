@@ -10,8 +10,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import static com.xm.netty_proxy_common.msg.ProxyMessageType.*;
 
 @Slf4j
@@ -24,8 +22,6 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
     private final String targetHost;
 
     private final int targetPort;
-
-    private final AtomicBoolean processed = new AtomicBoolean(false);
 
     public ReceiveProxyMessageHandler(ConnectCallBack connectCallBack, Channel localChannel, String targetHost, int targetPort) {
         this.connectCallBack = connectCallBack;
@@ -70,47 +66,50 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
      * 处理连接成功
      */
     private void handleBuildConnectSuccess(Channel proxyChannel) {
-        if (processed.compareAndSet(false, true)) {
-            log.info("【代理通道】【目标->{}:{}】建立通道成功", targetHost, targetPort);
-            connectCallBack.success(proxyChannel);
-        } else {
-            log.warn("【代理通道】【目标->{}:{}】重复接收到连接成功响应, 已忽略", targetHost, targetPort);
-        }
+        log.info("【代理通道】【目标->{}:{}】建立通道成功", targetHost, targetPort);
+        connectCallBack.success(proxyChannel);
     }
 
     /**
      * 处理数据传输
      */
     private void handleTransferData(Channel proxyChannel,ProxyMessage proxyMessage) {
-        if (localChannel.isActive()) {
-            byte[] data = proxyMessage.getData();
-            ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
-            localChannel.writeAndFlush(byteBuf).addListener(future -> {
-                if (!future.isSuccess()) {
-                    log.error("【代理通道】【目标->{}:{}】回写数据到本地失败", targetHost, targetPort);
-                    safeCloseResources(proxyChannel);
-                }
-            });
-        } else {
-            log.warn("【代理通道】【目标->{}:{}】本地通道不活跃", targetHost, targetPort);
+        if (localChannel==null){
+            log.error("【代理通道】【目标->{}:{}】本地通道不存在,无法回写到本地", targetHost, targetPort);
             safeCloseResources(proxyChannel);
+            return;
         }
+        if (!localChannel.isActive()){
+            log.error("【代理通道】【目标->{}:{}】本地通道不活跃,无法回写到本地", targetHost, targetPort);
+            safeCloseResources(proxyChannel);
+            return;
+        }
+
+        byte[] data = proxyMessage.getData();
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
+        localChannel.writeAndFlush(byteBuf).addListener(future -> {
+            if (!future.isSuccess()) {
+                log.error("【代理通道】【目标->{}:{}】回写数据到本地失败", targetHost, targetPort);
+            }
+        });
     }
 
     /**
      * 处理服务端代理连接目标失败
      */
     private void handleServerProxyTargetFail(Channel proxyChannel) {
-        log.info("【代理通道】【目标->{}:{}】因服务端代理目标连接失败,故关闭本地通道", targetHost, targetPort);
+        // 修复：取消注释，确保在服务端代理失败时关闭本地资源
         safeCloseResources(proxyChannel);
+        log.info("【代理通道】【目标->{}:{}】因服务端代理目标连接失败,故关闭本地通道", targetHost, targetPort);
     }
 
     /**
      * 处理服务端代理连接目标关闭
      */
     private void handleServerProxyTargetClose(Channel proxyChannel) {
-        log.info("【代理通道】【目标->{}:{}】因服务端代理目标连接已关闭,故关闭本地通道", targetHost, targetPort);
+        // 修复：取消注释，确保在服务端连接关闭时关闭本地资源
         safeCloseResources(proxyChannel);
+        log.info("【代理通道】【目标->{}:{}】因服务端代理目标连接已关闭,故关闭本地通道", targetHost, targetPort);
     }
 
 
@@ -118,7 +117,7 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
     public void channelInactive(ChannelHandlerContext ctx) {
         log.info("【代理通道】【目标->{}:{}】关闭", targetHost,targetPort);
         // 如果连接成功回调还没有被调用，需要通知失败
-        if (!processed.get() && connectCallBack != null) {
+        if (connectCallBack != null) {
             connectCallBack.error(ctx.channel());
         }
         safeCloseResources(ctx.channel());
@@ -128,7 +127,7 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         log.error("【代理通道】【目标->{}:{}】错误->{}", targetHost,targetPort, cause.getMessage());
         // 如果连接成功回调还没有被调用，需要通知失败
-        if (!processed.get() && connectCallBack != null) {
+        if (connectCallBack != null) {
             connectCallBack.error(ctx.channel());
         }
         safeCloseResources(ctx.channel());
@@ -142,7 +141,7 @@ public class ReceiveProxyMessageHandler extends SimpleChannelInboundHandler<Prox
         try {
             // 关闭本地通道
             if (localChannel != null && localChannel.isActive()) {
-                localChannel.flush().close();
+                localChannel.close();
             }
             // 归还代理连接
             ProxyConnectManager.returnProxyConnect(proxyChannel);

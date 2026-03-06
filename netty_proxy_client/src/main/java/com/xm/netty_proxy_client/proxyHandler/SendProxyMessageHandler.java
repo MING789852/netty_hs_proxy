@@ -56,13 +56,12 @@ public class SendProxyMessageHandler extends SimpleChannelInboundHandler<ByteBuf
         try {
             // 关闭本地通道
             if (localChannel != null && localChannel.isActive()) {
-                localChannel.flush().close();
+                localChannel.close();
             }
             //发送客户端断开连接
-            proxyChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapClientNotifyServerClose()).addListener(future -> {
-                // 归还代理连接
-                ProxyConnectManager.returnProxyConnect(proxyChannel);
-            });
+            proxyChannel.writeAndFlush(ProxyConnectManager.getProxyMessageManager().wrapClientNotifyServerClose());
+            // 归还代理连接
+            ProxyConnectManager.returnProxyConnect(proxyChannel);
         } catch (Exception e) {
             log.error("【本地通道】【目标->{}:{}】关闭资源时发生异常", targetHost, targetPort, e);
         }
