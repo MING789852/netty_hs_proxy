@@ -2,7 +2,7 @@ package com.xm.netty_proxy_server.config;
 
 import java.util.ResourceBundle;
 
-public class Config {
+public class ServerConfig {
     public static final String USERNAME;
     public static final String PASSWORD;
 

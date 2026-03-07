@@ -2,8 +2,8 @@ package com.xm.netty_proxy_server.manager;
 
 import com.xm.netty_proxy_common.callback.ConnectCallBack;
 import com.xm.netty_proxy_common.msg.ProxyMessageManager;
-import com.xm.netty_proxy_server.config.Config;
-import com.xm.netty_proxy_server.proxyHandler.ProxyMessageHandler;
+import com.xm.netty_proxy_server.config.ServerConfig;
+import com.xm.netty_proxy_server.proxyHandler.ServerSendMessageHandler;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -14,7 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class ProxyConnectManager {
+public class ServerProxyConnectManager {
 
     // 共享的EventLoopGroup
     private static final NioEventLoopGroup eventLoopGroup= new NioEventLoopGroup();
@@ -26,7 +26,7 @@ public class ProxyConnectManager {
 
     static {
         // 初始化代理消息管理器
-        proxyMessageManager = new ProxyMessageManager(Config.USERNAME, Config.PASSWORD);
+        proxyMessageManager = new ProxyMessageManager(ServerConfig.USERNAME, ServerConfig.PASSWORD);
     }
 
     /**
@@ -48,7 +48,7 @@ public class ProxyConnectManager {
                 .handler(new ChannelInitializer<NioSocketChannel>() {
                     @Override
                     protected void initChannel(NioSocketChannel nioSocketChannel) {
-                        nioSocketChannel.pipeline().addLast(new ProxyMessageHandler(serverChannel));
+                        nioSocketChannel.pipeline().addLast(new ServerSendMessageHandler(serverChannel));
                     }
                 });
         bootstrap.connect(host, port).addListener((ChannelFutureListener) channelFuture -> {

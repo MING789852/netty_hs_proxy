@@ -1,6 +1,6 @@
 package com.xm.netty_proxy_client.boot;
 
-import com.xm.netty_proxy_client.config.Config;
+import com.xm.netty_proxy_client.config.ClientConfig;
 import com.xm.netty_proxy_client.localHandler.XUnificationServerHandler;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -53,7 +53,7 @@ public class ProxyClientBoot {
     }
 
     public static void main(String[] args) {
-        ProxyClientBoot proxyClientBoot=new ProxyClientBoot(Config.CLIENT_PORT);
+        ProxyClientBoot proxyClientBoot=new ProxyClientBoot(ClientConfig.CLIENT_PORT);
         proxyClientBoot.run();
     }
 }

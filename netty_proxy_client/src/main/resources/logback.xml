@@ -17,8 +17,8 @@
 
 
     <!--配置日志输出级别 -->
-    <logger name="com.xm.netty_proxy_client.proxyHandler.SendProxyMessageHandler" level="INFO"/>
-    <logger name="com.xm.netty_proxy_client.proxyHandler.ReceiveProxyMessageHandler" level="INFO"/>
+    <logger name="com.xm.netty_proxy_client.proxyHandler.ClientSendMessageHandler" level="INFO"/>
+    <logger name="com.xm.netty_proxy_client.proxyHandler.ClientReceiveMessageHandler" level="INFO"/>
 
     <!-- 设置日志输出级别 -->
     <root level="DEBUG">
