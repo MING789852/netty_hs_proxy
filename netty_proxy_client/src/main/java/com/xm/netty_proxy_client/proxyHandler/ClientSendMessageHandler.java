@@ -5,11 +5,12 @@ import com.xm.netty_proxy_common.msg.ProxyMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class ClientSendMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
+public class ClientSendMessageHandler extends ChannelInboundHandlerAdapter {
 
     private final Channel proxyChannel;
     private final String targetHost;
@@ -22,14 +23,35 @@ public class ClientSendMessageHandler extends SimpleChannelInboundHandler<ByteBu
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) {
-        if (proxyChannel != null && proxyChannel.isActive()) {
-            // 直接传递 ByteBuf 包装
-            ProxyMessage msg = ClientProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(byteBuf);
-            proxyChannel.writeAndFlush(msg).addListener(f -> {
-                if (!f.isSuccess()) ctx.close();
-            });
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        if (msg instanceof ByteBuf) {
+            ByteBuf byteBuf = (ByteBuf) msg;
+            if (proxyChannel != null && proxyChannel.isActive()) {
+                ProxyMessage pMsg = ClientProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(byteBuf);
+                proxyChannel.writeAndFlush(pMsg).addListener(f -> {
+                    if (!f.isSuccess()) ctx.close();
+                });
+
+                // 背压控制：代理通道拥堵时，暂停读取本地浏览器/应用数据
+                if (!proxyChannel.isWritable()) {
+                    ctx.channel().config().setAutoRead(false);
+                }
+            } else {
+                ReferenceCountUtil.release(byteBuf);
+                ctx.close();
+            }
+        } else {
+            ctx.fireChannelRead(msg);
         }
+    }
+
+    @Override
+    public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+        // 修复死锁：当本地通道恢复可写时，唤醒被暂停的代理通道
+        if (ctx.channel().isWritable() && proxyChannel != null && proxyChannel.isActive()) {
+            proxyChannel.config().setAutoRead(true);
+        }
+        super.channelWritabilityChanged(ctx);
     }
 
     @Override

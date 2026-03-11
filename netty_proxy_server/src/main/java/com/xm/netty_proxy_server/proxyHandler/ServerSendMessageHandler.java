@@ -4,13 +4,14 @@ import com.xm.netty_proxy_server.manager.ServerProxyConnectManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class ServerSendMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
+public class ServerSendMessageHandler extends ChannelInboundHandlerAdapter {
 
-    private final Channel serverChannel; // 指向 Proxy Client 的连接
+    private final Channel serverChannel; // 连向代理客户端的通道
 
     public ServerSendMessageHandler(Channel serverChannel) {
         this.serverChannel = serverChannel;
@@ -18,40 +19,48 @@ public class ServerSendMessageHandler extends SimpleChannelInboundHandler<ByteBu
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        // 初始关闭自动读取，等待授权完成及 BuildConnectSuccess 发送后再开启
-        ctx.channel().config().setAutoRead(false);
+        ctx.channel().config().setAutoRead(true);
         super.channelActive(ctx);
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf byteBuf) {
-        if (serverChannel != null && serverChannel.isActive()) {
-            // 流控：如果代理通道发送缓冲区满了，停止读取目标服务器数据
-            if (!serverChannel.isWritable()) {
-                ctx.channel().config().setAutoRead(false);
-            }
-
-            serverChannel.writeAndFlush(ServerProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(byteBuf))
-                    .addListener(future -> {
-                        if (future.isSuccess()) {
-                            // 发送成功后，如果通道恢复可写，重新开启读取
-                            if (serverChannel.isWritable()) {
-                                ctx.channel().config().setAutoRead(true);
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        if (msg instanceof ByteBuf) {
+            ByteBuf byteBuf = (ByteBuf) msg;
+            if (serverChannel != null && serverChannel.isActive()) {
+                // 直接封装转发
+                serverChannel.writeAndFlush(ServerProxyConnectManager.getProxyMessageManager().wrapTransferByteBuf(byteBuf))
+                        .addListener(future -> {
+                            if (!future.isSuccess()) {
+                                log.error("【转发失败】目标 -> 客户端");
+                                ctx.close();
                             }
-                        } else {
-                            log.error("【目标 -> 代理】转发数据失败, 关闭连接");
-                            ctx.close();
-                        }
-                    });
+                        });
+
+                // 背压控制：客户端连接发送缓冲区满时，暂停读取目标服务器数据
+                if (!serverChannel.isWritable()) {
+                    ctx.channel().config().setAutoRead(false);
+                }
+            } else {
+                ReferenceCountUtil.release(byteBuf);
+                ctx.close();
+            }
         } else {
-            ctx.close();
+            ctx.fireChannelRead(msg);
         }
     }
 
     @Override
+    public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+        // 修复死锁：当目标服务器连接恢复可写时，唤醒对客户端连接的读取
+        if (ctx.channel().isWritable() && serverChannel != null && serverChannel.isActive()) {
+            serverChannel.config().setAutoRead(true);
+        }
+        super.channelWritabilityChanged(ctx);
+    }
+
+    @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        log.info("【代理目标通道】目标服务器主动断开: {}", ctx.channel().remoteAddress());
-        // 通知客户端：目标服务器已关闭
         if (serverChannel != null && serverChannel.isActive()) {
             serverChannel.writeAndFlush(ServerProxyConnectManager.getProxyMessageManager().wrapServerProxyTargetClose());
         }
@@ -60,7 +69,6 @@ public class ServerSendMessageHandler extends SimpleChannelInboundHandler<ByteBu
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("【代理目标通道】异常: {}", cause.getMessage());
         ctx.close();
     }
 }

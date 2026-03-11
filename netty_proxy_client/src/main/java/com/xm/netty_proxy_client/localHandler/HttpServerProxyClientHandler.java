@@ -12,8 +12,10 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class HttpServerProxyClientHandler extends ChannelInboundHandlerAdapter {
@@ -22,9 +24,14 @@ public class HttpServerProxyClientHandler extends ChannelInboundHandlerAdapter {
     private final int targetPort;
     private final String httpMethod;
     private final boolean isConnectMethod;
-    private final Queue<ByteBuf> bufferCache = new LinkedList<>();
+    private final Queue<ByteBuf> bufferCache = new ArrayDeque<>();
+
     private Channel proxyChannel;
-    private boolean connecting = false;
+
+    // 守卫1：确保连接逻辑只触发一次 (CAS 保证)
+    private final AtomicBoolean connectStarted = new AtomicBoolean(false);
+    // 守卫2：确保 Pipeline 切换和缓存冲刷只执行一次
+    private final AtomicBoolean switched = new AtomicBoolean(false);
 
     public HttpServerProxyClientHandler(String targetHost, int targetPort, String httpMethod) {
         this.targetHost = targetHost;
@@ -41,15 +48,21 @@ public class HttpServerProxyClientHandler extends ChannelInboundHandlerAdapter {
         }
 
         ByteBuf data = (ByteBuf) msg;
-        if (proxyChannel != null && proxyChannel.isActive()) {
+
+        // 如果已经完成切换，直接向后传递（此为双重保险）
+        if (switched.get()) {
             ctx.fireChannelRead(data);
-        } else {
-            bufferCache.add(data);
-            if (!connecting) {
-                connecting = true;
-                ctx.channel().config().setAutoRead(false);
-                startProxyConnect(ctx);
-            }
+            return;
+        }
+
+        // 1. 将数据加入缓存队列
+        bufferCache.add(data);
+
+        // 2. 利用 AtomicBoolean 保证 startProxyConnect 的唯一调用
+        if (connectStarted.compareAndSet(false, true)) {
+            // 暂停自动读取，防止在连接建立期间缓存过多数据导致 OOM
+            ctx.channel().config().setAutoRead(false);
+            startProxyConnect(ctx);
         }
     }
 
@@ -61,6 +74,7 @@ public class HttpServerProxyClientHandler extends ChannelInboundHandlerAdapter {
         ClientProxyConnectManager.getProxyConnect(new ConnectCallBack() {
             @Override
             public void success(Channel pChannel) {
+                // 回到 EventLoop 线程执行，确保线程安全
                 ctx.executor().execute(() -> {
                     proxyChannel = pChannel;
                     handleConnectionReady(ctx);
@@ -79,11 +93,13 @@ public class HttpServerProxyClientHandler extends ChannelInboundHandlerAdapter {
 
     private void handleConnectionReady(ChannelHandlerContext ctx) {
         if (isConnectMethod) {
+            // HTTPS 代理需要先回复 200 Connection Established
             String resp = "HTTP/1.1 200 Connection Established\r\n\r\n";
             ctx.writeAndFlush(Unpooled.copiedBuffer(resp, StandardCharsets.US_ASCII))
-                    .addListener(f -> {
+                    .addListener((ChannelFutureListener) f -> {
                         if (f.isSuccess()) {
-                            ByteBuf first = bufferCache.poll(); // 移除并释放 CONNECT 请求包
+                            // 弹出并释放 CONNECT 请求本身的 ByteBuf
+                            ByteBuf first = bufferCache.poll();
                             if (first != null) first.release();
                             completeSwitch(ctx);
                         } else {
@@ -96,29 +112,44 @@ public class HttpServerProxyClientHandler extends ChannelInboundHandlerAdapter {
     }
 
     private void completeSwitch(ChannelHandlerContext ctx) {
-        // 1. 添加正式转发器
-        ctx.pipeline().addLast(ClientConfig.SEND_PROXY_MESSAGE_HANDLER,
-                new ClientSendMessageHandler(proxyChannel, targetHost, targetPort));
+        // 使用 switched 保证整个“切换”动作（改Pipeline、刷缓存、删自己）全局只执行一次
+        if (switched.compareAndSet(false, true)) {
+            ChannelPipeline pipeline = ctx.pipeline();
 
-        try {
-            // 2. 冲刷缓存至下一个 Handler
-            while (!bufferCache.isEmpty()) {
-                ByteBuf buf = bufferCache.poll();
-                if (buf != null) ctx.fireChannelRead(buf);
+            // 1、添加 Handler
+            if (pipeline.get(ClientConfig.SEND_PROXY_MESSAGE_HANDLER) == null) {
+                pipeline.addLast(ClientConfig.SEND_PROXY_MESSAGE_HANDLER,
+                        new ClientSendMessageHandler(proxyChannel, targetHost, targetPort));
             }
-        } finally {
-            // 3. 严格清理：防止异常导致的内存泄漏
-            cleanCache();
-            ctx.pipeline().remove(this);
-            ctx.channel().config().setAutoRead(true);
-            log.debug("【HTTP代理】切换至转发模式完毕: {}:{}", targetHost, targetPort);
+
+            try {
+                // 2. 将缓存中的后续数据包全部冲刷到新添加的 Handler
+                while (!bufferCache.isEmpty()) {
+                    ByteBuf buf = bufferCache.poll();
+                    if (buf != null) {
+                        ctx.fireChannelRead(buf);
+                    }
+                }
+            } finally {
+                // 3. 严格清理
+                cleanCache();
+                ctx.channel().config().setAutoRead(true);
+
+                // 4. 任务完成，将自己从 Pipeline 中移除
+                if (pipeline.context(this) != null) {
+                    pipeline.remove(this);
+                }
+                log.debug("【HTTP代理】模式切换成功: {}:{}", targetHost, targetPort);
+            }
         }
     }
 
     private void cleanCache() {
         while (!bufferCache.isEmpty()) {
             ByteBuf b = bufferCache.poll();
-            if (b != null && b.refCnt() > 0) b.release();
+            if (b != null && b.refCnt() > 0) {
+                b.release();
+            }
         }
     }
 
@@ -131,7 +162,7 @@ public class HttpServerProxyClientHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("【HTTP代理】异常: {}", cause.getMessage());
+        log.error("【HTTP代理】Pipeline 异常: {}", cause.getMessage());
         cleanCache();
         ctx.close();
     }
